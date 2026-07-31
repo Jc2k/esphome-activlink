@@ -18,7 +18,7 @@ jobs:
       contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -66,7 +66,7 @@ jobs:
       published: ${{ steps.release-state.outputs.published }}
     steps:
       - name: Check out repository history
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
