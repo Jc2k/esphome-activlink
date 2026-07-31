@@ -110,6 +110,9 @@ Releases are built, versioned, and published automatically from semantic commit
 messages after the host tests and the complete ESP32-C6 firmware build pass.
 Use Conventional Commit prefixes such as `fix:`, `feat:`, and `feat!:` (or a
 `BREAKING CHANGE:` footer) to request patch, minor, and major releases.
+ESPHome is pinned exactly and updated daily by Dependabot; those updates use
+`fix(deps):` and therefore produce a patch release. GitHub Actions are checked
+weekly and use `ci(deps):`, so Actions-only updates do not produce a release.
 
 ### Discover another transmitter ID
 
