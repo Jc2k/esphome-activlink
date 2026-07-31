@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload GitHub Pages artifact
         if: steps.release-state.outputs.published == 'true'
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
