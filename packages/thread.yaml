@@ -1,0 +1,7 @@
+network:
+  enable_ipv6: true
+
+openthread:
+  device_type: FTD
+  tlv: !secret thread_tlv
+

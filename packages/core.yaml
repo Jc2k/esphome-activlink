@@ -1,0 +1,68 @@
+esphome:
+  name: honeywell-activlink
+  friendly_name: Honeywell ActivLink Gateway
+  min_version: 2026.7.3
+  devices:
+    # Copy this entry and the corresponding honeywell_activlink button block
+    # for every physical transmitter.
+    - id: front_door_button
+      name: Front Door Button
+
+esp32:
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+external_components:
+  - source:
+      type: local
+      path: components
+
+logger:
+  level: DEBUG
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+spi:
+  id: cc1101_spi
+  clk_pin: ${spi_clk_pin}
+  mosi_pin: ${spi_mosi_pin}
+  miso_pin: ${spi_miso_pin}
+
+cc1101:
+  id: activlink_radio
+  spi_id: cc1101_spi
+  cs_pin: ${cc1101_cs_pin}
+  frequency: 868.21MHz
+  modulation_type: ASK/OOK
+  symbol_rate: 6250
+  filter_bandwidth: 203kHz
+  sync_mode: "None"
+
+remote_receiver:
+  id: activlink_receiver
+  pin: ${cc1101_rx_pin}
+  filter: 50us
+  idle: 3ms
+  buffer_size: 40kb
+  receive_symbols: 4096
+  rmt_symbols: 96
+
+honeywell_activlink:
+  id: activlink_decoder
+  receiver_id: activlink_receiver
+  buttons:
+    - activlink_id: 0xFB100
+      event:
+        name: Press
+        device_id: front_door_button
+      battery_low:
+        name: Battery low
+        device_id: front_door_button
+        entity_category: diagnostic

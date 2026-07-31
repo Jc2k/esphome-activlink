@@ -1,0 +1,11 @@
+substitutions:
+  # Adafruit ESP32-C6 Feather labels: SCK, MO, MI, A3, and SCL.
+  spi_clk_pin: GPIO21
+  spi_mosi_pin: GPIO22
+  spi_miso_pin: GPIO23
+  cc1101_cs_pin: GPIO5
+  cc1101_rx_pin: GPIO18
+
+packages:
+  core: !include packages/core.yaml
+  network: !include packages/thread.yaml
