@@ -1,0 +1,38 @@
+# This profile is irreversible on first boot. Use it only after the bootstrap
+# image has created the HMAC_UP key in eFuse BLOCK_KEY0 and retained its Thread
+# dataset over a second boot. See docs/secure-thread-provisioning.md.
+esp32:
+  framework:
+    advanced:
+      signed_ota_verification:
+        signing_key: .firmware-signing-key.pem
+        signing_scheme: rsa3072
+      enable_ota_downgrade_protection: true
+      nvs_encryption:
+        key_id: 0
+    sdkconfig_options:
+      # The signed Secure Boot bootloader is larger than the default 0x8000
+      # pre-table space. 0xC000 still leaves otadata + phy below app0 at 0x10000.
+      CONFIG_PARTITION_TABLE_OFFSET: "0xC000"
+      # ESPHome's signed_ota_verification normally selects signed-app checking
+      # without eFuse Secure Boot. Override that mode and enable hardware
+      # Secure Boot V2 for the ESP32-C6 bootloader and application.
+      CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT: "n"
+      CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT: "n"
+      CONFIG_SECURE_BOOT: "y"
+      CONFIG_SECURE_BOOT_V2_ENABLED: "y"
+      CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME: "y"
+      CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES: "y"
+      # PlatformIO must include the signed bootloader in firmware.factory.bin.
+      CONFIG_SECURE_BOOT_FLASH_BOOTLOADER_DEFAULT: "y"
+      # Retain physical recovery, but restrict ROM download mode to no-stub
+      # basic flash commands. Secure Boot validates the image when it boots.
+      CONFIG_SECURE_ENABLE_SECURE_ROM_DL_MODE: "y"
+      # Explicitly preserve the safer defaults and make them build-auditable.
+      CONFIG_SECURE_BOOT_INSECURE: "n"
+      CONFIG_SECURE_BOOT_ALLOW_JTAG: "n"
+      CONFIG_SECURE_BOOT_V2_ALLOW_EFUSE_RD_DIS: "n"
+      CONFIG_SECURE_BOOT_ENABLE_AGGRESSIVE_KEY_REVOKE: "n"
+      # Only NVS is encrypted by this design; full flash encryption is a
+      # separate, more restrictive lifecycle decision.
+      CONFIG_SECURE_FLASH_ENC_ENABLED: "n"

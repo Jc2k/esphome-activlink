@@ -43,8 +43,13 @@ jobs:
       - name: Validate ESPHome configuration
         run: uv run esphome config honeywell-gateway.yaml
 
-      - name: Compile ESP32-C6 firmware
-        run: uv run esphome compile honeywell-gateway.yaml
+      - name: Create ephemeral firmware signing key
+        run: >-
+          uv run python -m espsecure generate-signing-key
+          --version 2 --scheme rsa3072 .firmware-signing-key.pem
+
+      - name: Compile and verify ESP32-C6 Secure Boot release firmware
+        run: uv run python scripts/prepare_release.py 0.0.1
 
   release:
     name: Create semantic release
@@ -90,6 +95,14 @@ jobs:
 
       - name: Install release dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Materialize firmware signing key
+        env:
+          FIRMWARE_SIGNING_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY }}
+        run: |
+          test -n "$FIRMWARE_SIGNING_KEY"
+          install -m 600 /dev/null .firmware-signing-key.pem
+          printf '%s\n' "$FIRMWARE_SIGNING_KEY" > .firmware-signing-key.pem
 
       - name: Run semantic-release
         env:

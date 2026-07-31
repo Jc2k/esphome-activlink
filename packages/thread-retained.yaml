@@ -1,0 +1,11 @@
+network:
+  enable_ipv6: true
+
+openthread:
+  device_type: FTD
+  # A public production image must not contain the private dataset. ESPHome
+  # currently requires a TLV or network key at validation time, so use a
+  # deliberately malformed one-byte TLV. A valid dataset already stored in NVS
+  # takes precedence. With empty NVS, OpenThread rejects this TLV and aborts
+  # instead of creating a public/default Thread network.
+  tlv: "00"

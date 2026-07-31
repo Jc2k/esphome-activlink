@@ -1,0 +1,26 @@
+http_request:
+  verify_ssl: true
+
+update:
+  - platform: http_request
+    name: Firmware Update
+    source: https://unrouted.uk/esphome-activlink/firmware/manifest.json
+
+ota:
+  - id: managed_http_ota
+    platform: http_request
+
+# This authenticated native-API action is the private recovery path for a
+# future dataset migration. Signature verification remains the authority: MD5
+# catches transfer errors, while Secure Boot rejects an untrusted image.
+api:
+  actions:
+    - action: install_signed_firmware
+      variables:
+        url: string
+        expected_md5: string
+      then:
+        - ota.http_request.flash:
+            id: managed_http_ota
+            url: !lambda return url;
+            md5: !lambda return expected_md5;

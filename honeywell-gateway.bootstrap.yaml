@@ -5,13 +5,18 @@ substitutions:
   spi_mosi_pin: GPIO22
   spi_miso_pin: GPIO23
   cc1101_cs_pin: GPIO5
-  # Module pin 3 (GDO0) is the proven receive-data path on Feather SCL.
   cc1101_rx_pin: GPIO18
 
 packages:
   core: !include packages/core.yaml
-  network: !include packages/wifi.yaml
+  network: !include packages/thread.yaml
+  security: !include packages/security-bootstrap.yaml
 
+esphome:
+  build_path: build/honeywell-activlink-bootstrap
+
+# Persist the existing Home Assistant API key into encrypted NVS alongside the
+# Thread dataset. Neither value is present in the later public image.
 honeywell_activlink:
   api_encryption_key: !secret api_encryption_key
 

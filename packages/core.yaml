@@ -27,13 +27,6 @@ logger:
 api:
   encryption:
 
-http_request:
-
-update:
-  - platform: http_request
-    name: Firmware Update
-    source: https://unrouted.uk/esphome-activlink/firmware/manifest.json
-
 spi:
   id: cc1101_spi
   clk_pin: ${spi_clk_pin}

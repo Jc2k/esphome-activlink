@@ -9,9 +9,10 @@ Assistant, with:
 - one doorbell event entity with **press** and **secret_press** event types;
 - one **battery_low** binary sensor driven by the transmitted LOWBAT flag.
 
-The initial configuration uses Wi-Fi and ESPHome's native API. A Thread variant
-is included, but Wi-Fi is deliberately the bring-up path: serial/OTA logs are
-much easier to use while the wiring and RF settings are still being verified.
+The development configuration uses Wi-Fi and ESPHome's native API. The managed
+production configuration uses Thread after a guarded local bootstrap: serial
+and Wi-Fi remain the easier path while wiring and RF settings are still being
+verified, before any irreversible security transition.
 Matter is not needed; ESPHome's native API already provides local delivery,
 events, encryption, and sub-devices over either Wi-Fi or Thread.
 
@@ -94,17 +95,25 @@ The first flash should be over USB. Later runs can use ESPHome OTA.
 
 ### Managed firmware updates
 
-Released firmware advertises an update entity in Home Assistant. The device
-checks the ESPHome update manifest at
-[unrouted.uk/esphome-activlink](https://unrouted.uk/esphome-activlink/) every six
-hours and can install a newer release directly from there.
+Managed devices use a private local bootstrap to put the Thread Active
+Operational Dataset and Home Assistant API key into HMAC-backed encrypted NVS.
+A public production image then preserves NVS and enables ESP32-C6 hardware
+Secure Boot V2. Public binaries contain neither credential; a fail-closed
+sentinel prevents them from joining a known fallback network on blank flash.
 
-Public release binaries contain no Wi-Fi, API, or OTA secrets. The local build
-saves its API encryption key and Wi-Fi credentials in flash; release builds load
-those saved values after an OTA update. Flash the checked-in local configuration
-at least once before using managed updates. After moving to a public release,
-subsequent updates use the encrypted Home Assistant API and the HTTP OTA backend;
-use USB if you need to return to a locally customized build.
+This is an irreversible, ordered procedure—not a generic ESPHome or Web Tools
+flash. Follow the complete [secure Thread provisioning and dataset rotation
+runbook](docs/secure-thread-provisioning.md). Its guarded scripts verify the
+dataset, signing key, sdkconfig, bootloader/app signatures, partition boundaries,
+eFuse state, and the pre-lock reboot checkpoint.
+
+Released firmware advertises an update entity in Home Assistant and checks the
+manifest at
+[unrouted.uk/esphome-activlink](https://unrouted.uk/esphome-activlink/). Every
+public release is signed with the deployment's RSA-3072 key. Hardware Secure
+Boot and ESPHome's OTA verifier reject unsigned or differently signed code, and
+downgrade protection rejects older versions. After lock, USB recovery also
+requires same-key signed firmware and must preserve NVS.
 
 Releases are built, versioned, and published automatically from semantic commit
 messages after the host tests and the complete ESP32-C6 firmware build pass.
@@ -113,6 +122,20 @@ Use Conventional Commit prefixes such as `fix:`, `feat:`, and `feat!:` (or a
 ESPHome is pinned exactly and updated daily by Dependabot; those updates use
 `fix(deps):` and therefore produce a patch release. GitHub Actions are checked
 weekly and use `ci(deps):`, so Actions-only updates do not produce a release.
+
+The release workflow expects the private PEM key in the GitHub Actions secret
+`FIRMWARE_SIGNING_KEY`. Generate the key once, keep an offline backup, and copy
+the complete PEM file into that secret:
+
+    uv run python -m espsecure generate-signing-key \
+      --version 2 --scheme rsa3072 .firmware-signing-key.pem
+
+The key file is ignored by Git. Losing or replacing it prevents Secure-Boot
+devices from accepting any new firmware or dataset-migration image; USB does not
+bypass the hardware trust anchor. Already installed code keeps running. Keep an
+offline backup.
+Pull requests build and cryptographically verify a hardware-Secure-Boot release
+with a throwaway key, while releases use only the configured Actions secret.
 
 ### Discover another transmitter ID
 
@@ -161,13 +184,17 @@ ESPHome can carry its native API over Thread on the C6; this is not Matter. You
 need a working Home Assistant Thread border router and the preferred network's
 active operational dataset.
 
-1. copy the hex-encoded dataset TLV from Home Assistant's Thread integration to
-   thread_tlv in secrets.yaml;
-2. validate honeywell-gateway.thread.example.yaml;
-3. flash it over USB when moving from Wi-Fi to Thread.
+For a disposable development device, the example Thread configuration remains
+available. For a managed device, do not flash it directly. Copy the complete
+hex-encoded dataset TLV into `secrets.yaml`, then follow the [secure Thread
+runbook](docs/secure-thread-provisioning.md) to build and verify the private
+bootstrap, prove encrypted-NVS retention across a power cycle, install public
+production, and only then enable hardware Secure Boot.
 
-    uv run esphome config honeywell-gateway.thread.example.yaml
-    uv run esphome run honeywell-gateway.thread.example.yaml
+If the dataset changes later, a normal Thread Pending Operational Dataset is
+persisted automatically. Moving to an unrelated network uses a private,
+same-signing-key migration image; the runbook covers both online and USB paths
+and removal of the private image from both OTA slots.
 
 ## RF troubleshooting
 
@@ -195,8 +222,10 @@ schema and the complete ESPHome configuration:
 
     uv run esphome config honeywell-gateway.yaml
 
-Every push and pull request runs these tests and compiles the Wi-Fi firmware in
+Every push and pull request runs these tests and compiles and cryptographically
+verifies the hardware-Secure-Boot release firmware with an ephemeral CI key in
 GitHub Actions. On `main`, semantic-release creates the version tag and GitHub
-Release, then publishes the matching OTA manifest and binary to GitHub Pages.
+Release, then publishes only the public production OTA and factory firmware plus
+the matching OTA manifest to GitHub Pages.
 After creating the GitHub repository, select **GitHub Actions** as its Pages
 source under **Settings > Pages**.

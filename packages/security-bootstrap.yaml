@@ -1,0 +1,17 @@
+# The bootstrap image is intentionally NOT hardware-Secure-Boot enabled. Its
+# first boot must create and read-protect the per-device NVS HMAC key before the
+# production image permanently locks further eFuse read-protection.
+esp32:
+  framework:
+    sdkconfig_options:
+      # Keep all profiles byte-for-byte partition compatible. Hardware Secure
+      # Boot makes the production bootloader larger than the 0x8000 default.
+      CONFIG_PARTITION_TABLE_OFFSET: "0xC000"
+    advanced:
+      signed_ota_verification:
+        signing_key: .firmware-signing-key.pem
+        signing_scheme: rsa3072
+      nvs_encryption:
+        # Reserved project-wide for the per-device NVS HMAC key. Never change
+        # this after provisioning and do not allocate KEY0 to another feature.
+        key_id: 0

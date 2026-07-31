@@ -16,7 +16,11 @@
         "assets": [
           {
             "path": "release-assets/firmware.bin",
-            "label": "ESPHome OTA firmware"
+            "label": "Secure Boot ESPHome OTA firmware"
+          },
+          {
+            "path": "release-assets/firmware.factory.bin",
+            "label": "Secure Boot ESPHome factory firmware"
           },
           {
             "path": "release-assets/manifest.json",

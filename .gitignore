@@ -1,7 +1,10 @@
 .cache/
 .esphome/
 .pytest_cache/
+.provisioning/
 .release-*.yaml
+.private-build-*.yaml
+.firmware-signing-key.pem
 .venv/
 __pycache__/
 node_modules/

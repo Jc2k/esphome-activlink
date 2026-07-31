@@ -9,12 +9,17 @@ substitutions:
 
 packages:
   core: !include packages/core.yaml
-  network: !include packages/thread-retained.yaml
+  network: !include packages/thread.yaml
   security: !include packages/security-production.yaml
   updates: !include packages/managed-updates.yaml
 
 esphome:
-  build_path: build/honeywell-activlink-production
+  build_path: build/honeywell-activlink-migration
 
-# The public image contains neither the Thread dataset nor API key. Both are
-# loaded from the encrypted NVS established by the private bootstrap image.
+# Unlike the one-time bootstrap, this image is hardware-Secure-Boot compatible
+# and deliberately replaces a dataset already stored in encrypted NVS.
+openthread:
+  force_dataset: true
+
+honeywell_activlink:
+  api_encryption_key: !secret api_encryption_key

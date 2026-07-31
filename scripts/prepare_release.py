@@ -12,23 +12,16 @@ import subprocess
 import sys
 import tempfile
 
+from firmware_security import FirmwareProfile, verify_build
+
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_CONFIG = ROOT / "honeywell-gateway.release.yaml"
-BUILD_FIRMWARE = (
-    ROOT
-    / ".esphome"
-    / "build"
-    / "honeywell-activlink"
-    / "build"
-    / "firmware.ota.bin"
-)
+SIGNING_KEY = ROOT / ".firmware-signing-key.pem"
 REPOSITORY_URL = "https://github.com/Jc2k/esphome-activlink"
 PAGES_URL = "https://unrouted.uk/esphome-activlink"
 VERSION_PATTERN = re.compile(
-    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
-    r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
-    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
 )
 
 
@@ -55,8 +48,13 @@ def versioned_config(version: str) -> Path:
     return Path(handle.name)
 
 
-def build_firmware(version: str) -> Path:
-    """Compile the release config and return ESPHome's OTA image path."""
+def build_firmware(version: str) -> tuple[Path, Path]:
+    """Compile and verify the hardware-Secure-Boot release images."""
+    if not SIGNING_KEY.is_file():
+        raise FileNotFoundError(
+            f"missing firmware signing key: {SIGNING_KEY}; see README.md"
+        )
+
     config = versioned_config(version)
     try:
         subprocess.run(
@@ -67,12 +65,15 @@ def build_firmware(version: str) -> Path:
     finally:
         config.unlink(missing_ok=True)
 
-    if not BUILD_FIRMWARE.is_file():
-        raise FileNotFoundError(f"ESPHome did not produce {BUILD_FIRMWARE}")
-    return BUILD_FIRMWARE
+    # Do not publish merely because ESPHome returned successfully. Prove that
+    # NVS encryption, hardware Secure Boot V2, Secure Download mode, the signed
+    # bootloader/app, the fail-closed Thread sentinel, and the NVS boundary are
+    # all present in the artifacts that will actually be released.
+    build = verify_build(FirmwareProfile.PRODUCTION, SIGNING_KEY)
+    return build.ota_firmware, build.factory_firmware
 
 
-def prepare_assets(version: str, firmware: Path) -> None:
+def prepare_assets(version: str, ota_firmware: Path, factory_firmware: Path) -> None:
     """Create release downloads and a deployable GitHub Pages tree."""
     release_assets = ROOT / "release-assets"
     site = ROOT / "site"
@@ -84,11 +85,14 @@ def prepare_assets(version: str, firmware: Path) -> None:
     release_assets.mkdir()
 
     firmware_name = "firmware.bin"
+    factory_firmware_name = "firmware.factory.bin"
     pages_firmware = version_directory / firmware_name
-    shutil.copy2(firmware, pages_firmware)
-    shutil.copy2(firmware, release_assets / firmware_name)
+    shutil.copy2(ota_firmware, pages_firmware)
+    shutil.copy2(ota_firmware, release_assets / firmware_name)
+    shutil.copy2(factory_firmware, version_directory / factory_firmware_name)
+    shutil.copy2(factory_firmware, release_assets / factory_firmware_name)
 
-    digest = hashlib.md5(firmware.read_bytes(), usedforsecurity=False).hexdigest()
+    digest = hashlib.md5(ota_firmware.read_bytes(), usedforsecurity=False).hexdigest()
     manifest = {
         "name": "ESPHome Honeywell ActivLink gateway",
         "version": version,
@@ -115,6 +119,10 @@ def prepare_assets(version: str, firmware: Path) -> None:
         "<h1>ESPHome ActivLink firmware</h1>\n"
         f"<p>Latest release: <a href=\"{REPOSITORY_URL}/releases/tag/v{version}\">"
         f"v{version}</a></p>\n"
+        f'<p><a href="firmware/v{version}/{factory_firmware_name}">'
+        "Hardware-Secure-Boot factory firmware</a></p>\n"
+        "<p>Provision a private bootstrap image first. This public image "
+        "intentionally contains no Thread dataset.</p>\n"
         '<p><a href="firmware/manifest.json">OTA manifest</a></p>\n'
     )
 
@@ -123,8 +131,8 @@ def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit(f"usage: {Path(sys.argv[0]).name} VERSION")
     version = sys.argv[1]
-    firmware = build_firmware(version)
-    prepare_assets(version, firmware)
+    ota_firmware, factory_firmware = build_firmware(version)
+    prepare_assets(version, ota_firmware, factory_firmware)
 
 
 if __name__ == "__main__":
