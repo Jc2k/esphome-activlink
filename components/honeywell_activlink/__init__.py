@@ -1,12 +1,15 @@
+import base64
+
 from esphome import codegen as cg
-from esphome.components import binary_sensor, event, remote_base
+from esphome.components import api, binary_sensor, event, remote_base
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
 AUTO_LOAD = ["binary_sensor", "event"]
-DEPENDENCIES = ["remote_receiver"]
+DEPENDENCIES = ["api", "remote_receiver"]
 
 CONF_ACTIVLINK_ID = "activlink_id"
+CONF_API_ENCRYPTION_KEY = "api_encryption_key"
 CONF_BATTERY_LOW = "battery_low"
 CONF_BUTTONS = "buttons"
 CONF_DEDUPLICATION = "deduplication"
@@ -58,6 +61,9 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_BUTTONS): cv.All(
                 cv.ensure_list(BUTTON_SCHEMA), cv.Length(min=1)
             ),
+            cv.Optional(CONF_API_ENCRYPTION_KEY): cv.sensitive(
+                api.validate_encryption_key
+            ),
             cv.Optional(
                 CONF_DEDUPLICATION, default="250ms"
             ): cv.positive_time_period_milliseconds,
@@ -72,6 +78,8 @@ async def to_code(config):
     await cg.register_component(var, config)
     await remote_base.register_listener(var, config)
     cg.add(var.set_deduplication(config[CONF_DEDUPLICATION]))
+    if key := config.get(CONF_API_ENCRYPTION_KEY):
+        cg.add(var.set_api_encryption_key(list(base64.b64decode(key))))
 
     for button in config[CONF_BUTTONS]:
         event_var = await event.new_event(
@@ -85,4 +93,3 @@ async def to_code(config):
                 battery_var,
             )
         )
-

@@ -9,12 +9,15 @@ substitutions:
 
 packages:
   core: !include packages/core.yaml
-  network: !include packages/thread.yaml
 
-honeywell_activlink:
-  api_encryption_key: !secret api_encryption_key
+# Credentials provisioned by the local build are retained in flash across OTA.
+# Never put private credentials into this publicly downloadable build.
+wifi:
+
+improv_serial:
+
+provisioning:
+  timeout: 5min
 
 ota:
-  - platform: esphome
-    password: !secret ota_password
   - platform: http_request

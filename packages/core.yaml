@@ -2,6 +2,9 @@ esphome:
   name: honeywell-activlink
   friendly_name: Honeywell ActivLink Gateway
   min_version: 2026.7.3
+  project:
+    name: jc2k.esphome-activlink
+    version: ${firmware_version}
   devices:
     # Copy this entry and the corresponding honeywell_activlink button block
     # for every physical transmitter.
@@ -23,11 +26,13 @@ logger:
 
 api:
   encryption:
-    key: !secret api_encryption_key
 
-ota:
-  - platform: esphome
-    password: !secret ota_password
+http_request:
+
+update:
+  - platform: http_request
+    name: Firmware Update
+    source: https://unrouted.uk/esphome-activlink/firmware/manifest.json
 
 spi:
   id: cc1101_spi

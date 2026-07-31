@@ -1,7 +1,10 @@
 .cache/
 .esphome/
 .pytest_cache/
+.release-*.yaml
 .venv/
 __pycache__/
+node_modules/
+release-assets/
 secrets.yaml
-
+site/

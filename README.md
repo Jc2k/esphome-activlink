@@ -92,6 +92,25 @@ Before the final command:
 
 The first flash should be over USB. Later runs can use ESPHome OTA.
 
+### Managed firmware updates
+
+Released firmware advertises an update entity in Home Assistant. The device
+checks the ESPHome update manifest at
+[unrouted.uk/esphome-activlink](https://unrouted.uk/esphome-activlink/) every six
+hours and can install a newer release directly from there.
+
+Public release binaries contain no Wi-Fi, API, or OTA secrets. The local build
+saves its API encryption key and Wi-Fi credentials in flash; release builds load
+those saved values after an OTA update. Flash the checked-in local configuration
+at least once before using managed updates. After moving to a public release,
+subsequent updates use the encrypted Home Assistant API and the HTTP OTA backend;
+use USB if you need to return to a locally customized build.
+
+Releases are built, versioned, and published automatically from semantic commit
+messages after the host tests and the complete ESP32-C6 firmware build pass.
+Use Conventional Commit prefixes such as `fix:`, `feat:`, and `feat!:` (or a
+`BREAKING CHANGE:` footer) to request patch, minor, and major releases.
+
 ### Discover another transmitter ID
 
 The first captured transmitter, ID 0xFB100, is checked in as Front Door Button.
@@ -172,3 +191,9 @@ Running the following additionally validates the external component's Python
 schema and the complete ESPHome configuration:
 
     uv run esphome config honeywell-gateway.yaml
+
+Every push and pull request runs these tests and compiles the Wi-Fi firmware in
+GitHub Actions. On `main`, semantic-release creates the version tag and GitHub
+Release, then publishes the matching OTA manifest and binary to GitHub Pages.
+After creating the GitHub repository, select **GitHub Actions** as its Pages
+source under **Settings > Pages**.

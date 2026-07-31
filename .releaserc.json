@@ -1,0 +1,29 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "uv run python scripts/prepare_release.py ${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "release-assets/firmware.bin",
+            "label": "ESPHome OTA firmware"
+          },
+          {
+            "path": "release-assets/manifest.json",
+            "label": "ESPHome OTA manifest"
+          }
+        ]
+      }
+    ]
+  ]
+}

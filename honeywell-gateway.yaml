@@ -1,4 +1,5 @@
 substitutions:
+  firmware_version: "0.0.0-dev"
   # Adafruit ESP32-C6 Feather labels: SCK, MO, MI, A3, and SCL.
   spi_clk_pin: GPIO21
   spi_mosi_pin: GPIO22
@@ -10,3 +11,11 @@ substitutions:
 packages:
   core: !include packages/core.yaml
   network: !include packages/wifi.yaml
+
+honeywell_activlink:
+  api_encryption_key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+  - platform: http_request

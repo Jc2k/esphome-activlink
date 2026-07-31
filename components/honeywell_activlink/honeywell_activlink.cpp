@@ -14,6 +14,22 @@ void ActivLinkComponent::add_button(uint32_t device_id, event::Event *press_even
   this->buttons_.push_back({device_id, press_event, battery_low});
 }
 
+void ActivLinkComponent::loop() {
+  if (!this->persist_api_encryption_key_) {
+    return;
+  }
+  this->persist_api_encryption_key_ = false;
+
+  // Public OTA images omit secrets and let the API load its key from flash.
+  // Save the locally configured key once so that transition is seamless.
+  if (api::global_api_server == nullptr ||
+      !api::global_api_server->save_noise_psk(this->api_encryption_key_, false)) {
+    ESP_LOGE(TAG, "Failed to persist API encryption key for managed updates");
+    return;
+  }
+  api::global_api_server->set_noise_psk(this->api_encryption_key_);
+}
+
 bool ActivLinkComponent::on_receive(remote_base::RemoteReceiveData data) {
   ActivLinkFrame frame{};
   if (!decode_activlink(data.get_raw_data(), &frame)) {
@@ -69,4 +85,3 @@ void ActivLinkComponent::dump_config() {
 }
 
 }  // namespace esphome::honeywell_activlink
-
