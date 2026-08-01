@@ -10,7 +10,7 @@ substitutions:
 
 packages:
   core: !include packages/core.yaml
-  network: !include packages/wifi.yaml
+  network: !include packages/thread.yaml
 
 honeywell_activlink:
   api_encryption_key: !secret api_encryption_key

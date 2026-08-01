@@ -35,7 +35,9 @@ jobs:
         run: uv sync --locked
 
       - name: Create build-only secrets
-        run: cp secrets.example.yaml secrets.yaml
+        # This contains only public test values, including OpenThread's
+        # documentation dataset. It must never be used to provision a device.
+        run: cp tests/secrets.ci.yaml secrets.yaml
 
       - name: Run protocol tests
         run: uv run pytest

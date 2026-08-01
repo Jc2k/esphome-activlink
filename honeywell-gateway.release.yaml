@@ -10,6 +10,7 @@ substitutions:
 packages:
   core: !include packages/core.yaml
   network: !include packages/thread-retained.yaml
+  native_ipv6: !include packages/native-ipv6.yaml
   security: !include packages/security-production.yaml
   updates: !include packages/managed-updates.yaml
 

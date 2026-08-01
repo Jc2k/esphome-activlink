@@ -159,9 +159,14 @@ def write_factory(port: str, image: Path, *, erase_all: bool) -> None:
         "esp32c6",
         "--port",
         port,
-        "--no-stub",
-        "write-flash",
     ]
+    # ESP32-C6 ROM does not implement erase_flash, so the one deliberately
+    # destructive pre-lock erase must use esptool's temporary RAM stub. Every
+    # NVS-preserving and post-lock write stays in Secure-Download-compatible
+    # ROM mode and therefore explicitly disables the stub.
+    if not erase_all:
+        command.append("--no-stub")
+    command.append("write-flash")
     if erase_all:
         command.append("--erase-all")
     command.extend(["0x0", str(image)])

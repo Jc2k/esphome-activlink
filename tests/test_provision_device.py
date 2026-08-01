@@ -62,3 +62,25 @@ def test_device_mac_prefers_base_address_over_eui64(monkeypatch) -> None:
 
     monkeypatch.setattr(provision_device, "run_tool", fake_run_tool)
     assert provision_device.device_mac("ignored") == "22:33:44:55:66:77"
+
+
+def test_initial_erase_uses_stub(monkeypatch, tmp_path) -> None:
+    commands = []
+    monkeypatch.setattr(provision_device, "run_tool", lambda command: commands.append(command))
+    image = tmp_path / "bootstrap.factory.bin"
+
+    provision_device.write_factory("port", image, erase_all=True)
+
+    assert "--erase-all" in commands[0]
+    assert "--no-stub" not in commands[0]
+
+
+def test_nvs_preserving_write_uses_rom_mode(monkeypatch, tmp_path) -> None:
+    commands = []
+    monkeypatch.setattr(provision_device, "run_tool", lambda command: commands.append(command))
+    image = tmp_path / "production.factory.bin"
+
+    provision_device.write_factory("port", image, erase_all=False)
+
+    assert "--erase-all" not in commands[0]
+    assert "--no-stub" in commands[0]

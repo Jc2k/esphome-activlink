@@ -5,6 +5,7 @@
 .release-*.yaml
 .private-build-*.yaml
 .firmware-signing-key.pem
+.tlv
 .venv/
 __pycache__/
 node_modules/

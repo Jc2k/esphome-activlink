@@ -85,12 +85,35 @@ with a replacement key.
        chmod 600 .firmware-signing-key.pem
 
 3. Copy `secrets.example.yaml` to `secrets.yaml`. Set `thread_tlv` to the
-   complete hex-encoded Active Operational Dataset from the Thread network and
-   set `api_encryption_key` to the key already configured in Home Assistant.
-   Replace `ota_password` with at least 16 non-placeholder characters for the
-   bootstrap's temporary ESPHome OTA endpoint. Do not paste any of these values
-   into a command line, issue, log, or commit. The builder rejects the example's
-   all-zero API key because it would not provide the intended authentication.
+   hex-encoded Active Operational Dataset exported for the Thread network.
+   Apple/Home Assistant may export a partial dataset; this is valid as long as
+   it contains the Thread Network Key. OpenThread uses the supplied fields to
+   attach, then retrieves and persists the complete Active Dataset from its
+   parent. The builder validates the TLV framing, known field lengths, and
+   presence of the Network Key without printing any private field.
+   If Home Assistant already has an API encryption key for this device, retain
+   that value. Otherwise generate a 32-byte Noise PSK in ESPHome's required
+   Base64 representation:
+
+       openssl rand -base64 32
+
+   Generate a separate 256-bit password for the bootstrap's temporary ESPHome
+   OTA endpoint. Hex avoids quoting and character-set ambiguity:
+
+       openssl rand -hex 32
+
+   Paste the first output as the quoted `api_encryption_key` value and the
+   second as the quoted `ota_password` value. Never reuse one value for the
+   other. Home Assistant must be configured with the same API encryption key;
+   changing an existing key requires updating or reconfiguring its ESPHome
+   integration. The OTA password is used only by the private bootstrap profile;
+   production HTTP OTA relies on the firmware signature instead.
+
+   Do not paste any private value into a command line argument, issue, log, or
+   commit. The builder requires exactly 32 nonzero decoded bytes for the API
+   key and rejects OTA passwords shorter than 16 characters. It also rejects
+   the example's all-zero API key because it would not provide the intended
+   authentication.
 
 4. Build a matched set. The version must be three numeric components and should
    be the production version that the device will run:
@@ -128,7 +151,10 @@ an unrelated purpose.
 
 ### 2. Flash and boot the private bootstrap
 
-This is the **only** workflow step that erases the whole flash:
+This is the **only** workflow step that erases the whole flash. Because the
+ESP32-C6 ROM does not implement chip-wide erase, the guard uses esptool's
+temporary RAM stub for this pre-lock operation; later writes use ROM
+`--no-stub` mode:
 
     uv run python scripts/provision_device.py \
       --port /dev/cu.usbmodemXXXX \

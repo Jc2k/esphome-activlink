@@ -9,12 +9,10 @@ Assistant, with:
 - one doorbell event entity with **press** and **secret_press** event types;
 - one **battery_low** binary sensor driven by the transmitted LOWBAT flag.
 
-The development configuration uses Wi-Fi and ESPHome's native API. The managed
-production configuration uses Thread after a guarded local bootstrap: serial
-and Wi-Fi remain the easier path while wiring and RF settings are still being
-verified, before any irreversible security transition.
-Matter is not needed; ESPHome's native API already provides local delivery,
-events, encryption, and sub-devices over either Wi-Fi or Thread.
+All checked-in device configurations use Thread and ESPHome's native API.
+Managed production devices use a guarded local bootstrap before the
+irreversible security transition. Matter is not needed; ESPHome's native API
+provides local delivery, events, encryption, and sub-devices over Thread.
 
 ## Important hardware check
 
@@ -50,9 +48,9 @@ resolve to:
 | GDO0 | SCL | GPIO18 |
 | GDO2 (unused) | SDA | GPIO19 |
 
-The checked-in Wi-Fi and Thread configurations use this mapping. It has been
-verified on the Adafruit ESP32-C6 Feather: SPI reports CC1101 chip ID 0x0014 and
-GDO0 receives the doorbell waveform.
+The checked-in Thread configurations use this mapping. It has been verified on
+the Adafruit ESP32-C6 Feather: SPI reports CC1101 chip ID 0x0014 and GDO0
+receives the doorbell waveform.
 
 ## Protocol
 
@@ -76,7 +74,7 @@ and the maintained
 Physical captures from transmitter 0xFB100 confirm normal frame FB1000200001
 and secret-press frame FB1000200010; both reported a healthy battery.
 
-## Set up with Wi-Fi
+## Set up a disposable Thread development device
 
 Requirements are pinned in uv.lock; do not install ESPHome globally.
 
@@ -87,11 +85,18 @@ Requirements are pinned in uv.lock; do not install ESPHome globally.
 
 Before the final command:
 
-1. edit secrets.yaml;
-2. confirm the board is an Adafruit ESP32-C6 Feather and CSN is on A3;
-3. connect the board by USB.
+1. edit `secrets.yaml` and replace `thread_tlv` with the preferred Thread
+   network's active operational dataset;
+2. generate a native API encryption key with `openssl rand -base64 32` and
+   paste it as the quoted `api_encryption_key` value;
+3. generate an independent bootstrap OTA password with
+   `openssl rand -hex 32` and paste it as the quoted `ota_password` value;
+4. confirm the board is an Adafruit ESP32-C6 Feather and CSN is on A3; and
+5. connect the board by USB.
 
-The first flash should be over USB. Later runs can use ESPHome OTA.
+The first flash should be over USB. This development profile embeds the Thread
+dataset and API key, so do not distribute its binary. Use the managed workflow
+below for a device that will be permanently secured.
 
 ### Managed firmware updates
 

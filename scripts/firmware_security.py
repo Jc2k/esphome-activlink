@@ -282,7 +282,9 @@ def verify_build(
     )
 
 
-# Required components of a complete Thread Active Operational Dataset.
+# Length constraints for standard Thread Active Operational Dataset TLVs. A
+# dataset may legitimately be partial: OpenThread requires only the Network Key
+# to attach, then retrieves and persists the complete dataset from its parent.
 _DATASET_TLV_LENGTHS: dict[int, tuple[int, int]] = {
     0: (3, 3),  # Channel
     1: (2, 2),  # PAN ID
@@ -295,10 +297,11 @@ _DATASET_TLV_LENGTHS: dict[int, tuple[int, int]] = {
     14: (8, 8),  # Active Timestamp
     53: (3, 35),  # Channel Mask
 }
+_REQUIRED_BOOTSTRAP_TLVS = {5}  # Network Key
 
 
 def validate_thread_dataset_tlv(value: object) -> None:
-    """Reject placeholders, malformed TLVs, and incomplete active datasets."""
+    """Reject placeholders, malformed TLVs, and datasets without a Network Key."""
     if not isinstance(value, str) or not value:
         raise ValueError("thread_tlv must be a non-empty hex string")
     try:
@@ -322,11 +325,13 @@ def validate_thread_dataset_tlv(value: object) -> None:
         found[tlv_type] = length
         cursor += length
 
-    missing = sorted(set(_DATASET_TLV_LENGTHS) - set(found))
+    missing = sorted(_REQUIRED_BOOTSTRAP_TLVS - set(found))
     if missing:
-        raise ValueError(f"thread_tlv is not a complete active dataset (missing types {missing})")
-    for tlv_type, (minimum, maximum) in _DATASET_TLV_LENGTHS.items():
-        length = found[tlv_type]
+        raise ValueError(f"thread_tlv is missing required types {missing}")
+    for tlv_type, length in found.items():
+        if tlv_type not in _DATASET_TLV_LENGTHS:
+            continue
+        minimum, maximum = _DATASET_TLV_LENGTHS[tlv_type]
         if not minimum <= length <= maximum:
             raise ValueError(
                 f"thread_tlv type {tlv_type} has length {length}, expected {minimum}..{maximum}"

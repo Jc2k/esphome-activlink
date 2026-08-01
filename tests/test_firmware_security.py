@@ -24,9 +24,22 @@ COMPLETE_DATASET = (
     "0c0402a0f7f8"
 )
 
+# Partial datasets are valid OpenThread bootstrap credentials. Only the Network
+# Key is required to attach; the node obtains the complete Active Dataset from
+# its parent. These are public test values, not deployment credentials.
+PARTIAL_DATASET = (
+    "0e08000000000001000000030000100208e227ac6a7f24052f"
+    "051062b2442a928d9ea3b947a1618fc4085a030f4f70656e5468726561642d39383733"
+    "01029873"
+)
+
 
 def test_complete_thread_dataset_is_accepted() -> None:
     validate_thread_dataset_tlv(COMPLETE_DATASET)
+
+
+def test_partial_thread_dataset_with_network_key_is_accepted() -> None:
+    validate_thread_dataset_tlv(PARTIAL_DATASET)
 
 
 @pytest.mark.parametrize(

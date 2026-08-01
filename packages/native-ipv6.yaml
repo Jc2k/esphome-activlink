@@ -1,0 +1,23 @@
+substitutions:
+  # Override this with a routed IPv6 address for a local resolver (for example,
+  # OpenWrt) when public DNS should not be used. The default is Google Public
+  # DNS, matching ESP-IDF's built-in 8.8.8.8 choice for its DNS64 client.
+  native_ipv6_dns_server: "2001:4860:4860::8888"
+
+esp32:
+  framework:
+    sdkconfig_options:
+      # ESPHome enables ESP-IDF's DNS64 client for OpenThread by default. That
+      # client intercepts IPv6 lookups and resolves A records for synthesis. It
+      # is the wrong resolver path when the Thread network routes native IPv6.
+      CONFIG_OPENTHREAD_DNS64_CLIENT: "n"
+
+      # Seed lwIP with a resolver reachable directly over IPv6. Quotes are part
+      # of the raw sdkconfig string value expected by ESP-IDF.
+      CONFIG_LWIP_FALLBACK_DNS_SERVER_SUPPORT: "y"
+      CONFIG_LWIP_FALLBACK_DNS_SERVER_ADDRESS: '"${native_ipv6_dns_server}"'
+
+# ESPHome's HTTP component otherwise leaves the address family unspecified,
+# and dual-stack lwIP prefers an A record. This small linker wrapper changes
+# only ESP-IDF HTTP clients to request AAAA records and IPv6 sockets.
+native_ipv6_http:
