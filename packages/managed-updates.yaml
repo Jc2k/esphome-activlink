@@ -1,5 +1,6 @@
 http_request:
   verify_ssl: true
+  timeout: 30s
 
 update:
   - platform: http_request
