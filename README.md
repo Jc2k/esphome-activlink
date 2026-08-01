@@ -14,43 +14,64 @@ Managed production devices use a guarded local bootstrap before the
 irreversible security transition. Matter is not needed; ESPHome's native API
 provides local delivery, events, encryption, and sub-devices over Thread.
 
-## Important hardware check
+## M146 hardware and Veroboard wiring
 
-The [linked Amazon listing](https://www.amazon.co.uk/dp/B09YV5M5Z3) is advertised
-as a **433 MHz module**. The CC1101 silicon can tune to 868 MHz, but a module's
-antenna and RF matching network are frequency-specific. It may work only at very
-short range, or not at all, at 868 MHz. For dependable reception, use a CC1101
-module sold for **868/915 MHz** with an 868 MHz antenna.
+The final radio is the [M5Stack M146 CC1101 module](https://docs.m5stack.com/en/module/Module_CC1101).
+Its E07-900M10S radio, 855--925 MHz matching, SMA connector, and supplied antenna
+are suitable for the 868 MHz ActivLink signal. This module differs from the
+eight-pin prototype in one important respect: power M146 from **5 V**, not the
+Feather's 3.3 V pin. It has its own 5 V-to-3.3 V regulator.
 
-The radio is powered from **3.3 V only**. The common eight-pin CC1101 module
-pinout is:
+Wire the M146's 30-pin M5-Bus connector directly to the Veroboard as follows:
 
-| Module pin | Signal | Required here |
-| --- | --- | --- |
-| 1 | GND | yes |
-| 2 | 3.3 V | yes |
-| 3 | GDO0 | yes, raw receive data |
-| 4 | CSN / chip select | yes |
-| 5 | SCK | yes |
-| 6 | MOSI / MO | yes |
-| 7 | MISO / MI | yes |
-| 8 | GDO2 | no |
+| M146 M5-Bus pin | Signal | Feather connection | ESP32-C6 GPIO |
+| --- | --- | --- | --- |
+| 28 | 5 V input | USB | -- |
+| 1, 3, 5 | Ground | GND rail | -- |
+| 11 | SCK | SCK | GPIO21 |
+| 7 | MOSI | MO | GPIO22 |
+| 9 | MISO | MI | GPIO23 |
+| 8 | CSN | A3 | GPIO5 |
+| 2 | GDO0 receive data | header pad 14 (see note below) | GPIO14 |
 
-Your labels match an Adafruit ESP32-C6 Feather. On that board the connections
-resolve to:
+Set the M146 routing switches before powering it:
 
-| CC1101 signal | Feather label | ESP32-C6 GPIO |
-| --- | --- | --- |
-| CSN | A3 | GPIO5 |
-| SCK | SCK | GPIO21 |
-| MOSI | MO | GPIO22 |
-| MISO | MI | GPIO23 |
-| GDO0 | SCL | GPIO18 |
-| GDO2 (unused) | SDA | GPIO19 |
+- set exactly the CSN switch labelled **25** on; leave CSN 12, 15, and 0 off;
+- set exactly the GDO0 switch labelled **35** on; leave GDO0 5 and 13 off; and
+- leave every GDO2 switch off because this receiver does not use GDO2.
 
-The checked-in Thread configurations use this mapping. It has been verified on
-the Adafruit ESP32-C6 Feather: SPI reports CC1101 chip ID 0x0014 and GDO0
-receives the doorbell waveform.
+The switch labels are legacy M5Stack Core GPIO numbers, **not Feather GPIO
+numbers**. With the selections above they route CSN to physical bus pin 8 and
+GDO0 to physical bus pin 2; the Veroboard then connects those pins to Feather
+GPIO5 and GPIO14 respectively.
+
+The spare Feather header pad is GPIO14. Adafruit boards made before 23 January
+2025 may have that pad mistakenly silkscreened **12**; the board schematic still
+connects it to ESP32-C6 GPIO14. Do not use actual GPIO12: it is the USB D- signal
+and connecting GDO0 there would interfere with USB flashing, logs, and JTAG.
+
+Do not connect M146 bus pin 12 to the Feather 3V pin, and do not connect HPWR,
+BAT, GDO2, or other pass-through pins. Powering the Feather through its USB-C
+connector makes 5 V available at the Feather USB pin for M146. If the Feather is
+instead powered only from LiPo, provide a separate regulated 5 V supply for
+M146; do not feed 5 V into the Feather USB rail while a computer is also
+connected.
+
+For a robust Veroboard build, use a 2x15 2.54 mm socket so M146 remains
+replaceable, and mechanically support the module rather than hanging it from
+wires. Confirm pin 1 from the module marking and the official connector drawing
+before soldering because the apparent left/right numbering reverses when the
+connector is viewed from the other side. Use a short common ground rail, keep
+SPI and GDO0 tracks short, and add a 10--47 uF bulk capacitor between M146 pin
+28 and ground near the socket. Mount the SMA end where the connector and antenna
+are supported, preferably with the antenna upright and clear of the Feather,
+USB cable, and metalwork.
+
+The checked-in configurations now use GPIO14 for GDO0. This leaves the Feather's
+GPIO18/GPIO19 I2C bus available for its onboard MAX17048 battery monitor. The
+earlier 433 MHz prototype was verified with GPIO18; its successful chip ID and
+waveform captures remain useful evidence for the decoder and radio profile, but
+its physical wiring and power instructions do not apply to M146.
 
 ## Protocol
 
@@ -219,20 +240,21 @@ All checked-in profiles publish the no-extra-wiring diagnostics from
 
 The counters start again after a reboot. All of these entities use Home
 Assistant's diagnostic category so they do not crowd the main device controls.
-Supply-voltage and CC1101 RSSI/frequency-error telemetry are intentionally left
-for a later radio revision: useful power measurement needs an ADC divider or
-power monitor, while reliable CC1101 per-frame metrics need the new module and
-receive-state handling to be validated together.
+Battery-voltage and CC1101 RSSI/frequency-error telemetry are intentionally left
+for a later revision. Moving GDO0 to GPIO14 makes the Feather's GPIO18/GPIO19
+I2C bus and onboard MAX17048 available, but its ESPHome integration still needs
+to be added and validated. Reliable CC1101 per-frame metrics likewise need M146
+and receive-state handling to be tested together.
 
 ## RF troubleshooting
 
 - “CC1101 found” with a nonzero chip ID proves SPI/CSN wiring, not RF reception.
 - FF0F, 0000, or FFFF chip IDs normally indicate bad SPI, CSN, power, or ground
   wiring.
-- An 868/915 MHz CC1101 module with an 868 MHz antenna remains the preferred
-  hardware for dependable range.
-- Keep module wiring short and add local supply decoupling if the breakout does
-  not already have it.
+- M146 is matched for 855--925 MHz and has an external SMA antenna, making it
+  the preferred hardware for dependable range in this build.
+- Keep the Veroboard tracks short. M146 has onboard decoupling; the additional
+  nearby bulk capacitor helps with wiring and supply transients.
 - This project's 433 MHz-matched module works with ASK/OOK reception on the
   lower FSK sideband at 868.21 MHz. For a proper 868/915 MHz module, native
   2-FSK at 868.3 MHz with 50 kHz deviation should give better sensitivity.

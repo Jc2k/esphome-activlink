@@ -1,11 +1,11 @@
 substitutions:
   firmware_version: "0.0.0-dev"
-  # Adafruit ESP32-C6 Feather labels: SCK, MO, MI, A3, and SCL.
+  # Adafruit ESP32-C6 Feather labels: SCK, MO, MI, A3, and GPIO14.
   spi_clk_pin: GPIO21
   spi_mosi_pin: GPIO22
   spi_miso_pin: GPIO23
   cc1101_cs_pin: GPIO5
-  cc1101_rx_pin: GPIO18
+  cc1101_rx_pin: GPIO14
 
 packages:
   core: !include packages/core.yaml

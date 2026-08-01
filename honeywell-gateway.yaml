@@ -1,12 +1,13 @@
 substitutions:
   firmware_version: "0.0.0-dev"
-  # Adafruit ESP32-C6 Feather labels: SCK, MO, MI, A3, and SCL.
+  # Adafruit ESP32-C6 Feather labels: SCK, MO, MI, A3, and GPIO14.
   spi_clk_pin: GPIO21
   spi_mosi_pin: GPIO22
   spi_miso_pin: GPIO23
   cc1101_cs_pin: GPIO5
-  # Module pin 3 (GDO0) is the proven receive-data path on Feather SCL.
-  cc1101_rx_pin: GPIO18
+  # M146 GDO0; GPIO14 leaves GPIO18/GPIO19 free for the onboard I2C bus.
+  # Early Feather boards mistakenly silkscreened this GPIO14 header pad as 12.
+  cc1101_rx_pin: GPIO14
 
 packages:
   core: !include packages/core.yaml
