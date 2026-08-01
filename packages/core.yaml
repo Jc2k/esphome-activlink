@@ -1,3 +1,6 @@
+packages:
+  diagnostics: !include diagnostics.yaml
+
 esphome:
   name: honeywell-activlink
   friendly_name: Honeywell ActivLink Gateway

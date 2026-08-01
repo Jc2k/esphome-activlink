@@ -4,6 +4,7 @@
 #include "esphome/core/log.h"
 
 #include <cinttypes>
+#include <limits>
 
 namespace esphome::honeywell_activlink {
 
@@ -14,27 +15,41 @@ void ActivLinkComponent::add_button(uint32_t device_id, event::Event *press_even
   this->buttons_.push_back({device_id, press_event, battery_low});
 }
 
-void ActivLinkComponent::loop() {
-  if (!this->persist_api_encryption_key_) {
-    return;
-  }
-  this->persist_api_encryption_key_ = false;
+void ActivLinkComponent::setup() {
+  this->last_diagnostic_publish_ms_ = millis() - this->diagnostic_update_interval_ms_;
+}
 
-  // Public OTA images omit secrets and let the API load its key from flash.
-  // Save the locally configured key once so that transition is seamless.
-  if (api::global_api_server == nullptr ||
-      !api::global_api_server->save_noise_psk(this->api_encryption_key_, false)) {
-    ESP_LOGE(TAG, "Failed to persist API encryption key for managed updates");
-    return;
+void ActivLinkComponent::loop() {
+  if (this->persist_api_encryption_key_) {
+    this->persist_api_encryption_key_ = false;
+
+    // Public OTA images omit secrets and let the API load its key from flash.
+    // Save the locally configured key once so that transition is seamless.
+    if (api::global_api_server == nullptr ||
+        !api::global_api_server->save_noise_psk(this->api_encryption_key_, false)) {
+      ESP_LOGE(TAG, "Failed to persist API encryption key for managed updates");
+      return;
+    }
+    api::global_api_server->set_noise_psk(this->api_encryption_key_);
   }
-  api::global_api_server->set_noise_psk(this->api_encryption_key_);
+
+  const uint32_t now = millis();
+  if (now - this->last_diagnostic_publish_ms_ >= this->diagnostic_update_interval_ms_) {
+    this->last_diagnostic_publish_ms_ = now;
+    this->publish_diagnostics_(now);
+  }
 }
 
 bool ActivLinkComponent::on_receive(remote_base::RemoteReceiveData data) {
   ActivLinkFrame frame{};
   if (!decode_activlink(data.get_raw_data(), &frame)) {
+    this->decode_failures_++;
     return false;
   }
+
+  this->valid_frames_++;
+  this->last_valid_frame_ms_ = millis();
+  this->has_valid_frame_ = true;
 
   const uint32_t device_id = frame.device_id();
   ESP_LOGD(TAG,
@@ -65,10 +80,13 @@ bool ActivLinkComponent::on_receive(remote_base::RemoteReceiveData data) {
 
     if (!duplicate) {
       button.press_event->trigger(frame.secret_press() ? "secret_press" : "press");
+    } else {
+      this->duplicate_frames_++;
     }
     return true;
   }
 
+  this->unconfigured_frames_++;
   ESP_LOGW(TAG,
            "Unconfigured ActivLink doorbell id=0x%05" PRIX32
            "; add activlink_id: 0x%05" PRIX32 " to honeywell_activlink.buttons",
@@ -76,9 +94,30 @@ bool ActivLinkComponent::on_receive(remote_base::RemoteReceiveData data) {
   return true;
 }
 
+void ActivLinkComponent::publish_diagnostics_(uint32_t now) {
+  if (this->valid_frames_sensor_ != nullptr) {
+    this->valid_frames_sensor_->publish_state(this->valid_frames_);
+  }
+  if (this->decode_failures_sensor_ != nullptr) {
+    this->decode_failures_sensor_->publish_state(this->decode_failures_);
+  }
+  if (this->duplicate_frames_sensor_ != nullptr) {
+    this->duplicate_frames_sensor_->publish_state(this->duplicate_frames_);
+  }
+  if (this->unconfigured_frames_sensor_ != nullptr) {
+    this->unconfigured_frames_sensor_->publish_state(this->unconfigured_frames_);
+  }
+  if (this->last_valid_frame_age_sensor_ != nullptr) {
+    const float age = this->has_valid_frame_ ? (now - this->last_valid_frame_ms_) / 1000.0f
+                                             : std::numeric_limits<float>::quiet_NaN();
+    this->last_valid_frame_age_sensor_->publish_state(age);
+  }
+}
+
 void ActivLinkComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Honeywell ActivLink decoder:");
   ESP_LOGCONFIG(TAG, "  Deduplication: %" PRIu32 " ms", this->deduplication_ms_);
+  ESP_LOGCONFIG(TAG, "  Diagnostic update interval: %" PRIu32 " ms", this->diagnostic_update_interval_ms_);
   for (const auto &button : this->buttons_) {
     ESP_LOGCONFIG(TAG, "  Doorbell ID: 0x%05" PRIX32, button.device_id);
   }

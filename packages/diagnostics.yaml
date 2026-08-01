@@ -1,0 +1,78 @@
+debug:
+  update_interval: 60s
+
+sensor:
+  - platform: uptime
+    name: Gateway Uptime
+  - platform: internal_temperature
+    name: ESP32-C6 Die Temperature
+  - platform: debug
+    free:
+      name: Free Heap
+    min_free:
+      name: Minimum Free Heap
+    block:
+      name: Largest Free Heap Block
+    fragmentation:
+      name: Heap Fragmentation
+    loop_time:
+      name: Maximum Loop Time
+
+text_sensor:
+  - platform: version
+    name: Firmware Build
+  - platform: debug
+    reset_reason:
+      name: Reset Reason
+
+thread_diagnostics:
+  update_interval: 60s
+  attached:
+    name: Thread Attached
+  role:
+    name: Thread Role
+  rloc16:
+    name: Thread RLOC16
+  parent_rloc16:
+    name: Thread Parent RLOC16
+  partition_id:
+    name: Thread Partition ID
+  srp_client_running:
+    name: Thread SRP Client Running
+  srp_host_state:
+    name: Thread SRP Host State
+  attach_duration:
+    name: Thread Attach Duration
+  parent_average_rssi:
+    name: Thread Parent Average RSSI
+  parent_link_quality:
+    name: Thread Parent Link Quality
+  channel:
+    name: Thread Channel
+  parent_changes:
+    name: Thread Parent Changes
+  attach_attempts:
+    name: Thread Attach Attempts
+  ipv6_tx_failures:
+    name: Thread IPv6 TX Failures
+  ipv6_rx_failures:
+    name: Thread IPv6 RX Failures
+  mac_tx_retries:
+    name: Thread MAC TX Retries
+  mac_cca_failures:
+    name: Thread MAC CCA Failures
+  mac_rx_fcs_errors:
+    name: Thread MAC RX FCS Errors
+
+honeywell_activlink:
+  diagnostic_update_interval: 60s
+  valid_frames:
+    name: ActivLink Valid Frames
+  decode_failures:
+    name: ActivLink Decode Failures
+  duplicate_frames:
+    name: ActivLink Duplicate Frames
+  unconfigured_frames:
+    name: ActivLink Unconfigured Frames
+  last_valid_frame_age:
+    name: ActivLink Last Valid Frame Age

@@ -201,6 +201,29 @@ persisted automatically. Moving to an unrelated network uses a private,
 same-signing-key migration image; the runbook covers both online and USB paths
 and removal of the private image from both OTA slots.
 
+## Home Assistant diagnostics
+
+All checked-in profiles publish the no-extra-wiring diagnostics from
+`packages/diagnostics.yaml` once per minute. They include:
+
+- ESP32-C6 uptime, die temperature, reset reason, heap health, and maximum
+  component loop time;
+- Thread attachment and role, RLOC16, channel, partition, SRP state, attachment
+  duration, parent changes, attach attempts, IPv6 failures, and MAC retry/error
+  counters;
+- parent RLOC16, average RSSI, and link quality while the C6 is a Thread child;
+  these are unavailable when it is acting as a router or leader because those
+  roles do not have a parent;
+- ActivLink valid frames, rejected captures, duplicates, unconfigured IDs, and
+  the age of the last valid decoded frame.
+
+The counters start again after a reboot. All of these entities use Home
+Assistant's diagnostic category so they do not crowd the main device controls.
+Supply-voltage and CC1101 RSSI/frequency-error telemetry are intentionally left
+for a later radio revision: useful power measurement needs an ADC divider or
+power monitor, while reliable CC1101 per-frame metrics need the new module and
+receive-state handling to be validated together.
+
 ## RF troubleshooting
 
 - “CC1101 found” with a nonzero chip ID proves SPI/CSN wiring, not RF reception.
