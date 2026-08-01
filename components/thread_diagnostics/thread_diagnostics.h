@@ -19,6 +19,10 @@ class ThreadDiagnostics : public PollingComponent {
   void set_parent_rloc16_text_sensor(text_sensor::TextSensor *sensor) { this->parent_rloc16_text_sensor_ = sensor; }
   void set_partition_id_text_sensor(text_sensor::TextSensor *sensor) { this->partition_id_text_sensor_ = sensor; }
   void set_srp_host_state_text_sensor(text_sensor::TextSensor *sensor) { this->srp_host_state_text_sensor_ = sensor; }
+  void set_router_neighbors_text_sensor(text_sensor::TextSensor *sensor) {
+    this->router_neighbors_text_sensor_ = sensor;
+  }
+  void set_router_table_text_sensor(text_sensor::TextSensor *sensor) { this->router_table_text_sensor_ = sensor; }
 
   void set_attach_duration_sensor(sensor::Sensor *sensor) { this->attach_duration_sensor_ = sensor; }
   void set_parent_average_rssi_sensor(sensor::Sensor *sensor) { this->parent_average_rssi_sensor_ = sensor; }
@@ -31,6 +35,18 @@ class ThreadDiagnostics : public PollingComponent {
   void set_mac_tx_retries_sensor(sensor::Sensor *sensor) { this->mac_tx_retries_sensor_ = sensor; }
   void set_mac_cca_failures_sensor(sensor::Sensor *sensor) { this->mac_cca_failures_sensor_ = sensor; }
   void set_mac_rx_fcs_errors_sensor(sensor::Sensor *sensor) { this->mac_rx_fcs_errors_sensor_ = sensor; }
+  void set_router_neighbor_count_sensor(sensor::Sensor *sensor) { this->router_neighbor_count_sensor_ = sensor; }
+  void set_router_neighbor_best_rssi_sensor(sensor::Sensor *sensor) {
+    this->router_neighbor_best_rssi_sensor_ = sensor;
+  }
+  void set_router_neighbor_worst_rssi_sensor(sensor::Sensor *sensor) {
+    this->router_neighbor_worst_rssi_sensor_ = sensor;
+  }
+  void set_router_neighbor_min_link_quality_sensor(sensor::Sensor *sensor) {
+    this->router_neighbor_min_link_quality_sensor_ = sensor;
+  }
+  void set_known_router_count_sensor(sensor::Sensor *sensor) { this->known_router_count_sensor_ = sensor; }
+  void set_reachable_router_count_sensor(sensor::Sensor *sensor) { this->reachable_router_count_sensor_ = sensor; }
 
   void update() override;
   void dump_config() override;
@@ -44,6 +60,8 @@ class ThreadDiagnostics : public PollingComponent {
   text_sensor::TextSensor *parent_rloc16_text_sensor_{nullptr};
   text_sensor::TextSensor *partition_id_text_sensor_{nullptr};
   text_sensor::TextSensor *srp_host_state_text_sensor_{nullptr};
+  text_sensor::TextSensor *router_neighbors_text_sensor_{nullptr};
+  text_sensor::TextSensor *router_table_text_sensor_{nullptr};
 
   sensor::Sensor *attach_duration_sensor_{nullptr};
   sensor::Sensor *parent_average_rssi_sensor_{nullptr};
@@ -56,6 +74,12 @@ class ThreadDiagnostics : public PollingComponent {
   sensor::Sensor *mac_tx_retries_sensor_{nullptr};
   sensor::Sensor *mac_cca_failures_sensor_{nullptr};
   sensor::Sensor *mac_rx_fcs_errors_sensor_{nullptr};
+  sensor::Sensor *router_neighbor_count_sensor_{nullptr};
+  sensor::Sensor *router_neighbor_best_rssi_sensor_{nullptr};
+  sensor::Sensor *router_neighbor_worst_rssi_sensor_{nullptr};
+  sensor::Sensor *router_neighbor_min_link_quality_sensor_{nullptr};
+  sensor::Sensor *known_router_count_sensor_{nullptr};
+  sensor::Sensor *reachable_router_count_sensor_{nullptr};
 };
 
 }  // namespace esphome::thread_diagnostics

@@ -41,6 +41,10 @@ thread_diagnostics:
     name: Thread SRP Client Running
   srp_host_state:
     name: Thread SRP Host State
+  router_neighbors:
+    name: Thread Router Neighbors
+  router_table:
+    name: Thread Router Table
   attach_duration:
     name: Thread Attach Duration
   parent_average_rssi:
@@ -63,6 +67,18 @@ thread_diagnostics:
     name: Thread MAC CCA Failures
   mac_rx_fcs_errors:
     name: Thread MAC RX FCS Errors
+  router_neighbor_count:
+    name: Thread Router Neighbor Count
+  router_neighbor_best_rssi:
+    name: Thread Router Neighbor Best RSSI
+  router_neighbor_worst_rssi:
+    name: Thread Router Neighbor Worst RSSI
+  router_neighbor_min_link_quality:
+    name: Thread Router Neighbor Minimum Link Quality
+  known_router_count:
+    name: Thread Known Router Count
+  reachable_router_count:
+    name: Thread Reachable Router Count
 
 honeywell_activlink:
   diagnostic_update_interval: 60s

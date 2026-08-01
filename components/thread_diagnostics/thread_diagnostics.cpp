@@ -8,9 +8,11 @@
 #include <openthread/link.h>
 #include <openthread/srp_client.h>
 #include <openthread/thread.h>
+#include <openthread/thread_ftd.h>
 
 #include <cinttypes>
 #include <cstdio>
+#include <cstring>
 #include <limits>
 #include <string>
 
@@ -19,6 +21,8 @@ namespace esphome::thread_diagnostics {
 static const char *const TAG = "thread_diagnostics";
 
 namespace {
+
+constexpr size_t MAX_SUMMARY_LENGTH = 240;
 
 struct ThreadSnapshot {
   otDeviceRole role{OT_DEVICE_ROLE_DISABLED};
@@ -36,10 +40,21 @@ struct ThreadSnapshot {
   uint32_t mac_tx_retries{0};
   uint32_t mac_cca_failures{0};
   uint32_t mac_rx_fcs_errors{0};
+  uint8_t router_neighbor_count{0};
+  int8_t router_neighbor_best_rssi{OT_RADIO_RSSI_INVALID};
+  int8_t router_neighbor_worst_rssi{OT_RADIO_RSSI_INVALID};
+  uint8_t router_neighbor_min_link_quality{0};
+  uint8_t known_router_count{0};
+  uint8_t reachable_router_count{0};
   bool parent_valid{false};
   bool partition_valid{false};
+  bool router_neighbors_valid{false};
+  bool router_neighbor_rssi_valid{false};
+  bool router_table_valid{false};
   bool srp_client_running{false};
   std::string srp_host_state{"disabled"};
+  std::string router_neighbors{"unavailable"};
+  std::string router_table{"unavailable"};
 };
 
 const char *role_to_string(otDeviceRole role) {
@@ -73,6 +88,102 @@ std::string format_hex32(uint32_t value) {
   char buffer[11];
   std::snprintf(buffer, sizeof(buffer), "0x%08" PRIX32, value);
   return buffer;
+}
+
+void append_summary(std::string &summary, const char *entry) {
+  const size_t separator_length = summary.empty() ? 0 : 2;
+  const size_t entry_length = std::strlen(entry);
+  if (summary.size() + separator_length + entry_length <= MAX_SUMMARY_LENGTH) {
+    if (!summary.empty()) {
+      summary.append("; ");
+    }
+    summary.append(entry);
+  } else if (summary.size() + 3 <= MAX_SUMMARY_LENGTH &&
+             (summary.size() < 3 || summary.compare(summary.size() - 3, 3, "...") != 0)) {
+    summary.append("...");
+  }
+}
+
+void collect_router_neighbors(otInstance *instance, ThreadSnapshot &snapshot) {
+  snapshot.router_neighbors_valid = true;
+  snapshot.router_neighbors.clear();
+
+  otNeighborInfoIterator iterator = OT_NEIGHBOR_INFO_ITERATOR_INIT;
+  otNeighborInfo neighbor{};
+  while (otThreadGetNextNeighborInfo(instance, &iterator, &neighbor) == OT_ERROR_NONE) {
+    if (neighbor.mIsChild) {
+      continue;
+    }
+
+    snapshot.router_neighbor_count++;
+    if (snapshot.router_neighbor_count == 1 ||
+        neighbor.mLinkQualityIn < snapshot.router_neighbor_min_link_quality) {
+      snapshot.router_neighbor_min_link_quality = neighbor.mLinkQualityIn;
+    }
+    if (neighbor.mAverageRssi != OT_RADIO_RSSI_INVALID) {
+      if (!snapshot.router_neighbor_rssi_valid || neighbor.mAverageRssi > snapshot.router_neighbor_best_rssi) {
+        snapshot.router_neighbor_best_rssi = neighbor.mAverageRssi;
+      }
+      if (!snapshot.router_neighbor_rssi_valid || neighbor.mAverageRssi < snapshot.router_neighbor_worst_rssi) {
+        snapshot.router_neighbor_worst_rssi = neighbor.mAverageRssi;
+      }
+      snapshot.router_neighbor_rssi_valid = true;
+    }
+
+    char entry[56];
+    if (neighbor.mAverageRssi == OT_RADIO_RSSI_INVALID) {
+      std::snprintf(entry, sizeof(entry), "0x%04" PRIX16 " RSSI? LQ%u age=%" PRIu32 "s", neighbor.mRloc16,
+                    neighbor.mLinkQualityIn, neighbor.mAge);
+    } else {
+      std::snprintf(entry, sizeof(entry), "0x%04" PRIX16 " %ddBm LQ%u age=%" PRIu32 "s", neighbor.mRloc16,
+                    neighbor.mAverageRssi, neighbor.mLinkQualityIn, neighbor.mAge);
+    }
+    append_summary(snapshot.router_neighbors, entry);
+  }
+
+  if (snapshot.router_neighbors.empty()) {
+    snapshot.router_neighbors = "none";
+  }
+}
+
+void collect_router_table(otInstance *instance, ThreadSnapshot &snapshot) {
+  if (snapshot.role != OT_DEVICE_ROLE_ROUTER && snapshot.role != OT_DEVICE_ROLE_LEADER) {
+    return;
+  }
+
+  snapshot.router_table_valid = true;
+  snapshot.router_table.clear();
+  const uint8_t max_router_id = otThreadGetMaxRouterId(instance);
+  for (uint16_t router_id = 0; router_id <= max_router_id; router_id++) {
+    otRouterInfo router{};
+    if (otThreadGetRouterInfo(instance, router_id, &router) != OT_ERROR_NONE || !router.mAllocated ||
+        router.mRloc16 == snapshot.rloc16) {
+      continue;
+    }
+
+    snapshot.known_router_count++;
+    const bool reachable = router.mLinkEstablished || router.mNextHop <= max_router_id;
+    if (reachable) {
+      snapshot.reachable_router_count++;
+    }
+
+    char entry[64];
+    if (router.mLinkEstablished) {
+      std::snprintf(entry, sizeof(entry), "0x%04" PRIX16 " direct c%u LQ%u/%u", router.mRloc16,
+                    router.mPathCost, router.mLinkQualityIn, router.mLinkQualityOut);
+    } else if (router.mNextHop <= max_router_id) {
+      const uint16_t next_hop_rloc16 = static_cast<uint16_t>(router.mNextHop) << 10;
+      std::snprintf(entry, sizeof(entry), "0x%04" PRIX16 " via 0x%04" PRIX16 " c%u", router.mRloc16,
+                    next_hop_rloc16, router.mPathCost);
+    } else {
+      std::snprintf(entry, sizeof(entry), "0x%04" PRIX16 " unreachable", router.mRloc16);
+    }
+    append_summary(snapshot.router_table, entry);
+  }
+
+  if (snapshot.router_table.empty()) {
+    snapshot.router_table = "none";
+  }
 }
 
 }  // namespace
@@ -117,6 +228,11 @@ void ThreadDiagnostics::update() {
       snapshot.parent_average_rssi = parent_average_rssi;
       snapshot.parent_valid = true;
     }
+  }
+
+  if (attached) {
+    collect_router_neighbors(instance, snapshot);
+    collect_router_table(instance, snapshot);
   }
 
   if (const otMleCounters *counters = otThreadGetMleCounters(instance); counters != nullptr) {
@@ -165,6 +281,13 @@ void ThreadDiagnostics::update() {
   if (this->srp_host_state_text_sensor_ != nullptr) {
     this->srp_host_state_text_sensor_->publish_state(snapshot.srp_host_state);
   }
+  if (this->router_neighbors_text_sensor_ != nullptr) {
+    this->router_neighbors_text_sensor_->publish_state(snapshot.router_neighbors_valid ? snapshot.router_neighbors
+                                                                                       : "unavailable");
+  }
+  if (this->router_table_text_sensor_ != nullptr) {
+    this->router_table_text_sensor_->publish_state(snapshot.router_table_valid ? snapshot.router_table : "unavailable");
+  }
 
   const float unavailable = std::numeric_limits<float>::quiet_NaN();
   if (this->attach_duration_sensor_ != nullptr) {
@@ -199,6 +322,32 @@ void ThreadDiagnostics::update() {
   }
   if (this->mac_rx_fcs_errors_sensor_ != nullptr) {
     this->mac_rx_fcs_errors_sensor_->publish_state(snapshot.mac_rx_fcs_errors);
+  }
+  if (this->router_neighbor_count_sensor_ != nullptr) {
+    this->router_neighbor_count_sensor_->publish_state(snapshot.router_neighbors_valid ? snapshot.router_neighbor_count
+                                                                                        : unavailable);
+  }
+  if (this->router_neighbor_best_rssi_sensor_ != nullptr) {
+    this->router_neighbor_best_rssi_sensor_->publish_state(snapshot.router_neighbor_rssi_valid
+                                                                ? snapshot.router_neighbor_best_rssi
+                                                                : unavailable);
+  }
+  if (this->router_neighbor_worst_rssi_sensor_ != nullptr) {
+    this->router_neighbor_worst_rssi_sensor_->publish_state(snapshot.router_neighbor_rssi_valid
+                                                                 ? snapshot.router_neighbor_worst_rssi
+                                                                 : unavailable);
+  }
+  if (this->router_neighbor_min_link_quality_sensor_ != nullptr) {
+    this->router_neighbor_min_link_quality_sensor_->publish_state(
+        snapshot.router_neighbor_count > 0 ? snapshot.router_neighbor_min_link_quality : unavailable);
+  }
+  if (this->known_router_count_sensor_ != nullptr) {
+    this->known_router_count_sensor_->publish_state(snapshot.router_table_valid ? snapshot.known_router_count
+                                                                                : unavailable);
+  }
+  if (this->reachable_router_count_sensor_ != nullptr) {
+    this->reachable_router_count_sensor_->publish_state(snapshot.router_table_valid ? snapshot.reachable_router_count
+                                                                                    : unavailable);
   }
 
   this->status_clear_warning();

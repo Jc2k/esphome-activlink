@@ -1,6 +1,10 @@
 http_request:
   verify_ssl: true
   timeout: 30s
+  # Keep the task watchdog beyond the complete request timeout. Thread's
+  # lower throughput otherwise lets a healthy 256-byte OTA read trip the
+  # ESP-IDF default 5-second watchdog before ESPHome can report a timeout.
+  watchdog_timeout: 45s
 
 update:
   - platform: http_request

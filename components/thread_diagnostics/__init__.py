@@ -33,6 +33,14 @@ CONF_PARENT_RLOC16 = "parent_rloc16"
 CONF_PARTITION_ID = "partition_id"
 CONF_RLOC16 = "rloc16"
 CONF_ROLE = "role"
+CONF_ROUTER_NEIGHBORS = "router_neighbors"
+CONF_ROUTER_NEIGHBOR_BEST_RSSI = "router_neighbor_best_rssi"
+CONF_ROUTER_NEIGHBOR_COUNT = "router_neighbor_count"
+CONF_ROUTER_NEIGHBOR_MIN_LINK_QUALITY = "router_neighbor_min_link_quality"
+CONF_ROUTER_NEIGHBOR_WORST_RSSI = "router_neighbor_worst_rssi"
+CONF_ROUTER_TABLE = "router_table"
+CONF_KNOWN_ROUTER_COUNT = "known_router_count"
+CONF_REACHABLE_ROUTER_COUNT = "reachable_router_count"
 CONF_SRP_CLIENT_RUNNING = "srp_client_running"
 CONF_SRP_HOST_STATE = "srp_host_state"
 
@@ -75,6 +83,12 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_SRP_HOST_STATE): text_sensor.text_sensor_schema(
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
+        cv.Optional(CONF_ROUTER_NEIGHBORS): text_sensor.text_sensor_schema(
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        cv.Optional(CONF_ROUTER_TABLE): text_sensor.text_sensor_schema(
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
         cv.Optional(CONF_ATTACH_DURATION): sensor.sensor_schema(
             unit_of_measurement=UNIT_SECOND,
             icon=ICON_TIMER,
@@ -110,6 +124,46 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_MAC_TX_RETRIES): _counter_schema(),
         cv.Optional(CONF_MAC_CCA_FAILURES): _counter_schema(),
         cv.Optional(CONF_MAC_RX_FCS_ERRORS): _counter_schema(),
+        cv.Optional(CONF_ROUTER_NEIGHBOR_COUNT): sensor.sensor_schema(
+            icon="mdi:access-point-network",
+            accuracy_decimals=0,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_ROUTER_NEIGHBOR_BEST_RSSI): sensor.sensor_schema(
+            unit_of_measurement=UNIT_DECIBEL_MILLIWATT,
+            icon="mdi:signal",
+            accuracy_decimals=0,
+            device_class=DEVICE_CLASS_SIGNAL_STRENGTH,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_ROUTER_NEIGHBOR_WORST_RSSI): sensor.sensor_schema(
+            unit_of_measurement=UNIT_DECIBEL_MILLIWATT,
+            icon="mdi:signal",
+            accuracy_decimals=0,
+            device_class=DEVICE_CLASS_SIGNAL_STRENGTH,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_ROUTER_NEIGHBOR_MIN_LINK_QUALITY): sensor.sensor_schema(
+            icon="mdi:signal",
+            accuracy_decimals=0,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_KNOWN_ROUTER_COUNT): sensor.sensor_schema(
+            icon="mdi:router-network",
+            accuracy_decimals=0,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_REACHABLE_ROUTER_COUNT): sensor.sensor_schema(
+            icon="mdi:router-network",
+            accuracy_decimals=0,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
     }
 ).extend(cv.polling_component_schema("60s"))
 
@@ -133,6 +187,8 @@ async def to_code(config):
         CONF_PARENT_RLOC16: "set_parent_rloc16_text_sensor",
         CONF_PARTITION_ID: "set_partition_id_text_sensor",
         CONF_SRP_HOST_STATE: "set_srp_host_state_text_sensor",
+        CONF_ROUTER_NEIGHBORS: "set_router_neighbors_text_sensor",
+        CONF_ROUTER_TABLE: "set_router_table_text_sensor",
     }
     for key, setter in text_sensors.items():
         if conf := config.get(key):
@@ -151,6 +207,12 @@ async def to_code(config):
         CONF_MAC_TX_RETRIES: "set_mac_tx_retries_sensor",
         CONF_MAC_CCA_FAILURES: "set_mac_cca_failures_sensor",
         CONF_MAC_RX_FCS_ERRORS: "set_mac_rx_fcs_errors_sensor",
+        CONF_ROUTER_NEIGHBOR_COUNT: "set_router_neighbor_count_sensor",
+        CONF_ROUTER_NEIGHBOR_BEST_RSSI: "set_router_neighbor_best_rssi_sensor",
+        CONF_ROUTER_NEIGHBOR_WORST_RSSI: "set_router_neighbor_worst_rssi_sensor",
+        CONF_ROUTER_NEIGHBOR_MIN_LINK_QUALITY: "set_router_neighbor_min_link_quality_sensor",
+        CONF_KNOWN_ROUTER_COUNT: "set_known_router_count_sensor",
+        CONF_REACHABLE_ROUTER_COUNT: "set_reachable_router_count_sensor",
     }
     for key, setter in sensors.items():
         if conf := config.get(key):
