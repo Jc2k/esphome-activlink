@@ -12,6 +12,12 @@ constexpr uint32_t LONG_MAX_US = 410;
 constexpr uint32_t SYNC_MIN_US = 400;
 constexpr uint32_t SYNC_MAX_US = 650;
 constexpr size_t FRAME_BITS = 48;
+constexpr uint8_t MINIMUM_REPEATS = 4;
+
+struct FrameCount {
+  ActivLinkFrame frame;
+  uint8_t count;
+};
 
 uint32_t duration_us(int32_t timing) {
   return timing < 0 ? static_cast<uint32_t>(-static_cast<int64_t>(timing))
@@ -101,9 +107,7 @@ bool decode_at(const std::vector<int32_t> &timings, size_t start, ActivLinkFrame
 }  // namespace
 
 bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame) {
-  ActivLinkFrame previous{};
-  bool have_previous = false;
-  uint8_t repeat_count = 0;
+  std::vector<FrameCount> candidates;
 
   for (size_t start = 0; start < timings.size(); start++) {
     ActivLinkFrame candidate{};
@@ -111,21 +115,25 @@ bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame
       continue;
     }
 
-    if (have_previous && candidate == previous) {
-      repeat_count++;
-    } else {
-      previous = candidate;
-      have_previous = true;
-      repeat_count = 1;
+    bool found = false;
+    for (auto &entry : candidates) {
+      if (!(entry.frame == candidate)) {
+        continue;
+      }
+      found = true;
+      entry.count++;
+      if (entry.count >= MINIMUM_REPEATS) {
+        *frame = candidate;
+        return true;
+      }
+      break;
     }
 
-    if (repeat_count >= 2) {
-      *frame = candidate;
-      return true;
+    if (!found) {
+      candidates.push_back({candidate, 1});
     }
   }
   return false;
 }
 
 }  // namespace esphome::honeywell_activlink
-

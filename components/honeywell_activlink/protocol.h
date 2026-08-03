@@ -22,9 +22,8 @@ struct ActivLinkFrame {
   bool operator==(const ActivLinkFrame &other) const { return bytes == other.bytes; }
 };
 
-// Decode at least two equal 48-bit PWM frames from ESPHome remote_receiver
-// timings. Both electrical polarities are accepted.
+// Decode at least four equal 48-bit PWM frames from the CC1101's asynchronous
+// serial output. Both electrical polarities are accepted.
 bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame);
 
 }  // namespace esphome::honeywell_activlink
-

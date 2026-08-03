@@ -40,8 +40,9 @@ cc1101:
   id: activlink_radio
   spi_id: cc1101_spi
   cs_pin: ${cc1101_cs_pin}
-  frequency: 868.21MHz
-  modulation_type: ASK/OOK
+  frequency: 868.3MHz
+  modulation_type: 2-FSK
+  fsk_deviation: 50kHz
   symbol_rate: 6250
   filter_bandwidth: 203kHz
   sync_mode: "None"

@@ -10,30 +10,57 @@ using esphome::honeywell_activlink::decode_activlink;
 
 namespace {
 
-std::vector<int32_t> encode(const std::array<uint8_t, 6> &bytes, unsigned repeats = 2,
-                            bool inverted = false) {
+using FrameBytes = std::array<uint8_t, 6>;
+
+void append_frame_symbols(const FrameBytes &bytes, std::vector<bool> *symbols) {
+  // ActivLink sends three LOW preamble symbols. Each data bit is HLL for 0 or
+  // HHL for 1, followed by three HIGH postamble symbols.
+  symbols->insert(symbols->end(), 3, false);
+  for (uint8_t byte : bytes) {
+    for (uint8_t mask = 0x80; mask != 0; mask >>= 1U) {
+      const bool bit = (byte & mask) != 0;
+      symbols->push_back(true);
+      symbols->push_back(bit);
+      symbols->push_back(false);
+    }
+  }
+  symbols->insert(symbols->end(), 3, true);
+}
+
+std::vector<int32_t> encode(const std::vector<FrameBytes> &frames, bool inverted = false) {
+  std::vector<bool> symbols;
+  for (const auto &frame : frames) {
+    append_frame_symbols(frame, &symbols);
+  }
+
   std::vector<int32_t> timings;
   timings.push_back(inverted ? -80 : 80);  // Leading receiver noise.
-  for (unsigned repeat = 0; repeat < repeats; repeat++) {
-    timings.push_back(inverted ? 480 : -480);
-    for (uint8_t byte : bytes) {
-      for (uint8_t mask = 0x80; mask != 0; mask >>= 1U) {
-        const bool bit = (byte & mask) != 0;
-        const int32_t first = bit ? 320 : 160;
-        const int32_t second = bit ? -160 : -320;
-        timings.push_back(inverted ? -first : first);
-        timings.push_back(inverted ? -second : second);
-      }
+  bool level = symbols.front();
+  uint32_t run_symbols = 0;
+  for (bool symbol : symbols) {
+    if (symbol == level) {
+      run_symbols++;
+      continue;
     }
-    timings.push_back(inverted ? -480 : 480);
+    const int32_t duration = static_cast<int32_t>(run_symbols * 160U);
+    timings.push_back((level != inverted) ? duration : -duration);
+    level = symbol;
+    run_symbols = 1;
   }
+  const int32_t duration = static_cast<int32_t>(run_symbols * 160U);
+  timings.push_back((level != inverted) ? duration : -duration);
   timings.push_back(inverted ? 3000 : -3000);
   return timings;
 }
 
+std::vector<int32_t> encode(const FrameBytes &bytes, unsigned repeats = 4,
+                            bool inverted = false) {
+  return encode(std::vector<FrameBytes>(repeats, bytes), inverted);
+}
+
 void test_normal_press() {
   // Captured from the project's first physical transmitter.
-  const std::array<uint8_t, 6> bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
+  const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
   ActivLinkFrame frame{};
   assert(decode_activlink(encode(bytes), &frame));
   assert(frame.bytes == bytes);
@@ -44,32 +71,41 @@ void test_normal_press() {
 }
 
 void test_inverted_secret_press() {
-  // Also captured from the physical transmitter; invert the synthetic timings
-  // to exercise the decoder's polarity-independent path.
-  const std::array<uint8_t, 6> bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x10};
+  // Also captured from the physical transmitter; invert the demodulated FSK
+  // symbol stream to exercise the decoder's polarity-independent path.
+  const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x10};
   ActivLinkFrame frame{};
-  assert(decode_activlink(encode(bytes, 3, true), &frame));
+  assert(decode_activlink(encode(bytes, 4, true), &frame));
   assert(frame.secret_press());
   assert(!frame.battery_low());
 }
 
 void test_secret_low_battery_press() {
   // Derived from the observed secret frame with LOWBAT set and parity adjusted.
-  const std::array<uint8_t, 6> bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x13};
+  const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x13};
   ActivLinkFrame frame{};
   assert(decode_activlink(encode(bytes), &frame));
   assert(frame.secret_press());
   assert(frame.battery_low());
 }
 
-void test_requires_repetition() {
-  const std::array<uint8_t, 6> bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
+void test_requires_four_repetitions() {
+  const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
   ActivLinkFrame frame{};
-  assert(!decode_activlink(encode(bytes, 1), &frame));
+  assert(!decode_activlink(encode(bytes, 3), &frame));
+  assert(decode_activlink(encode(bytes, 4), &frame));
+}
+
+void test_matching_repetitions_need_not_be_consecutive() {
+  const FrameBytes normal{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
+  const FrameBytes secret{0xFB, 0x10, 0x00, 0x20, 0x00, 0x10};
+  ActivLinkFrame frame{};
+  assert(decode_activlink(encode({normal, normal, secret, normal, normal}), &frame));
+  assert(frame.bytes == normal);
 }
 
 void test_rejects_bad_parity() {
-  const std::array<uint8_t, 6> bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x00};
+  const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x00};
   ActivLinkFrame frame{};
   assert(!decode_activlink(encode(bytes), &frame));
 }
@@ -80,6 +116,7 @@ int main() {
   test_normal_press();
   test_inverted_secret_press();
   test_secret_low_battery_press();
-  test_requires_repetition();
+  test_requires_four_repetitions();
+  test_matching_repetitions_need_not_be_consecutive();
   test_rejects_bad_parity();
 }

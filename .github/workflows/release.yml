@@ -51,7 +51,7 @@ jobs:
           --version 2 --scheme rsa3072 .firmware-signing-key.pem
 
       - name: Compile and verify ESP32-C6 Secure Boot release firmware
-        run: uv run python scripts/prepare_release.py 0.0.1
+        run: uv run python scripts/prepare_release.py 1.1.0
 
   release:
     name: Create semantic release

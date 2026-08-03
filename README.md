@@ -76,13 +76,12 @@ its physical wiring and power instructions do not apply to M146.
 ## Protocol
 
 European ActivLink uses 2-FSK centred on 868.3 MHz, approximately 50 kHz
-deviation and 6250 symbols/s. The linked 433 MHz-matched module did not produce
-data with native 2-FSK demodulation, but it successfully receives the lower FSK
-sideband as ASK/OOK at 868.21 MHz. That proven fallback is the checked-in radio
-profile. A transmission repeats a 48-bit PWM frame many times. The decoder:
+deviation and 6250 symbols/s. The M146 demodulates that signal natively and
+outputs its asynchronous symbol stream on GDO0. A transmission repeats a 48-bit
+PWM frame many times. The decoder:
 
 1. accepts either electrical polarity from GDO0;
-2. requires two matching frames;
+2. requires four matching frames, following rtl_433's integrity rule;
 3. verifies even parity;
 4. extracts the 20-bit transmitter ID, device type, secret-press, relay, and
    LOWBAT flags;
@@ -93,7 +92,9 @@ This follows the published
 and the maintained
 [rtl_433 decoder](https://github.com/merbanan/rtl_433/blob/master/src/devices/honeywell_wdb.c).
 Physical captures from transmitter 0xFB100 confirm normal frame FB1000200001
-and secret-press frame FB1000200010; both reported a healthy battery.
+and secret-press frame FB1000200010; both reported a healthy battery. The old
+433 MHz prototype used an ASK/OOK sideband workaround at 868.21 MHz; that is no
+longer part of the checked-in M146 profile.
 
 ## Set up a disposable Thread development device
 
@@ -145,6 +146,9 @@ Releases are built, versioned, and published automatically from semantic commit
 messages after the host tests and the complete ESP32-C6 firmware build pass.
 Use Conventional Commit prefixes such as `fix:`, `feat:`, and `feat!:` (or a
 `BREAKING CHANGE:` footer) to request patch, minor, and major releases.
+The release builder enforces version 1.1.0 as its minimum because the first
+native-FSK production deployment already runs that version and ESPHome's
+downgrade protection would reject an older release.
 ESPHome is pinned exactly and updated daily by Dependabot; those updates use
 `fix(deps):` and therefore produce a patch release. GitHub Actions are checked
 weekly and use `ci(deps):`, so Actions-only updates do not produce a release.
@@ -255,15 +259,16 @@ and receive-state handling to be tested together.
   the preferred hardware for dependable range in this build.
 - Keep the Veroboard tracks short. M146 has onboard decoupling; the additional
   nearby bulk capacitor helps with wiring and supply transients.
-- This project's 433 MHz-matched module works with ASK/OOK reception on the
-  lower FSK sideband at 868.21 MHz. For a proper 868/915 MHz module, native
-  2-FSK at 868.3 MHz with 50 kHz deviation should give better sensitivity.
+- The earlier 433 MHz-matched prototype required ASK/OOK reception on one FSK
+  sideband at 868.21 MHz. The M146 profile instead uses native 2-FSK at
+  868.3 MHz with 50 kHz deviation for better selectivity and sensitivity.
 
 ## Tests
 
-The protocol tests compile the decoder as host C++ and cover the captured normal
-and secret frames plus inverted polarity, synthetic LOWBAT, repetition, and
-parity cases:
+The protocol tests compile the decoder as host C++ and generate the documented
+three-symbol FSK stream (HLL for 0 and HHL for 1). They cover the captured
+normal and secret frames plus inverted polarity, synthetic LOWBAT, repeated-row
+consensus, and parity cases:
 
     uv run pytest
 

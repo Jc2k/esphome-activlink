@@ -23,12 +23,27 @@ PAGES_URL = "https://unrouted.uk/esphome-activlink"
 VERSION_PATTERN = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$"
 )
+MINIMUM_RELEASE_VERSION = (1, 1, 0)
+MINIMUM_RELEASE_VERSION_TEXT = ".".join(map(str, MINIMUM_RELEASE_VERSION))
+
+
+def validate_release_version(version: str) -> None:
+    """Reject invalid versions and firmware older than deployed production."""
+    match = VERSION_PATTERN.fullmatch(version)
+    if match is None:
+        raise ValueError(f"invalid semantic version: {version!r}")
+
+    parsed = tuple(int(part) for part in match.groups())
+    if parsed < MINIMUM_RELEASE_VERSION:
+        raise ValueError(
+            f"release version {version} is below the deployable minimum "
+            f"{MINIMUM_RELEASE_VERSION_TEXT}"
+        )
 
 
 def versioned_config(version: str) -> Path:
     """Create a temporary root config with the release version substituted."""
-    if not VERSION_PATTERN.fullmatch(version):
-        raise ValueError(f"invalid semantic version: {version!r}")
+    validate_release_version(version)
 
     source = SOURCE_CONFIG.read_text()
     marker = 'firmware_version: "0.0.0-dev"'
