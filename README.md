@@ -3,16 +3,25 @@
 This project turns an ESP32-C6 and a CC1101 into a receive-only Home Assistant
 gateway for European Honeywell/Friedland ActivLink transmitters.
 
-Each configured bell push is represented as its own ESPHome sub-device in Home
+Each paired bell push is represented as its own ESPHome sub-device in Home
 Assistant, with:
 
-- one doorbell event entity with **press** and **secret_press** event types;
-- one **battery_low** binary sensor driven by the transmitted LOWBAT flag.
+- one doorbell event entity with **ring** and **secret_press** event types;
+- one **battery_low** binary sensor driven by the transmitted LOWBAT flag;
+- diagnostic entities showing whether the slot is paired and its transmitter
+  ID.
 
-All checked-in device configurations use Thread and ESPHome's native API.
-Managed production devices use a guarded local bootstrap before the
-irreversible security transition. Matter is not needed; ESPHome's native API
-provides local delivery, events, encryption, and sub-devices over Thread.
+Every gateway derives its hostname from the Feather's stable hardware MAC. For
+example, a board whose MAC ends in `82:92:48` advertises as
+`honeywell-activlink-829248.local` and appears as **Honeywell ActivLink Gateway
+829248**. This keeps mDNS, the native API, and Home Assistant names stable and
+collision-free when multiple gateways run the same firmware.
+
+The primary configurations use 2.4 GHz Wi-Fi and ESPHome's native API. Wi-Fi
+credentials are supplied at runtime with physically authorized BLE Improv and
+are never compiled into firmware. Managed production devices use a guarded
+local bootstrap before the irreversible security transition. Matter is not
+needed.
 
 ## M146 hardware and Veroboard wiring
 
@@ -76,12 +85,15 @@ its physical wiring and power instructions do not apply to M146.
 ## Protocol
 
 European ActivLink uses 2-FSK centred on 868.3 MHz, approximately 50 kHz
-deviation and 6250 symbols/s. The M146 demodulates that signal natively and
+deviation and 6250 symbols/s. A 325 kHz receive filter gives the CC1101 enough
+frequency-compensation range for the roughly 65--73 kHz offset seen in
+historical European captures. The M146 demodulates that signal natively and
 outputs its asynchronous symbol stream on GDO0. A transmission repeats a 48-bit
 PWM frame many times. The decoder:
 
 1. accepts either electrical polarity from GDO0;
-2. requires four matching frames, following rtl_433's integrity rule;
+2. requires four matching frames, following rtl_433's integrity rule, while
+   accumulating that consensus across adjacent ESP32 RMT capture chunks;
 3. verifies even parity;
 4. extracts the 20-bit transmitter ID, device type, secret-press, relay, and
    LOWBAT flags;
@@ -92,11 +104,15 @@ This follows the published
 and the maintained
 [rtl_433 decoder](https://github.com/merbanan/rtl_433/blob/master/src/devices/honeywell_wdb.c).
 Physical captures from transmitter 0xFB100 confirm normal frame FB1000200001
-and secret-press frame FB1000200010; both reported a healthy battery. The old
+and secret-press frame FB1000200010; both reported a healthy battery. The same
+push also produces a relay-marked copy approximately 1.0--1.35 seconds later.
+The component suppresses relay-marked copies with a dedicated four-second window while
+retaining the shorter 250 ms repeat-frame filter, so genuine rapid presses are
+not hidden. The old
 433 MHz prototype used an ASK/OOK sideband workaround at 868.21 MHz; that is no
 longer part of the checked-in M146 profile.
 
-## Set up a disposable Thread development device
+## Set up a Wi-Fi development device
 
 Requirements are pinned in uv.lock; do not install ESPHome globally.
 
@@ -107,32 +123,33 @@ Requirements are pinned in uv.lock; do not install ESPHome globally.
 
 Before the final command:
 
-1. edit `secrets.yaml` and replace `thread_tlv` with the preferred Thread
-   network's active operational dataset;
-2. generate a native API encryption key with `openssl rand -base64 32` and
+1. generate a native API encryption key with `openssl rand -base64 32` and
    paste it as the quoted `api_encryption_key` value;
-3. generate an independent bootstrap OTA password with
+2. generate an independent bootstrap OTA password with
    `openssl rand -hex 32` and paste it as the quoted `ota_password` value;
-4. confirm the board is an Adafruit ESP32-C6 Feather and CSN is on A3; and
-5. connect the board by USB.
+3. confirm the board is an Adafruit ESP32-C6 Feather and CSN is on A3; and
+4. connect the board by USB.
 
-The first flash should be over USB. This development profile embeds the Thread
-dataset and API key, so do not distribute its binary. Use the managed workflow
-below for a device that will be permanently secured.
+The first flash should be over USB. When the gateway advertises through BLE
+Improv, briefly press **BOOT** to authorize provisioning, then send a 2.4 GHz
+SSID and password from an Improv client. The credential is saved in encrypted
+NVS, not in YAML or the firmware binary. This development profile still embeds
+the API key, so do not distribute its binary. Use the managed workflow below
+for a device that will be permanently secured.
 
 ### Managed firmware updates
 
-Managed devices use a private local bootstrap to put the Thread Active
-Operational Dataset and Home Assistant API key into HMAC-backed encrypted NVS.
-A public production image then preserves NVS and enables ESP32-C6 hardware
-Secure Boot V2. Public binaries contain neither credential; a fail-closed
-sentinel prevents them from joining a known fallback network on blank flash.
+Managed devices use a private local bootstrap to establish HMAC-backed encrypted
+NVS and save the Home Assistant API key. BLE Improv supplies Wi-Fi credentials
+directly to that encrypted NVS. A public production image then preserves NVS
+and enables ESP32-C6 hardware Secure Boot V2. Public binaries contain neither
+the Wi-Fi credential nor API key.
 
 This is an irreversible, ordered procedure—not a generic ESPHome or Web Tools
-flash. Follow the complete [secure Thread provisioning and dataset rotation
-runbook](docs/secure-thread-provisioning.md). Its guarded scripts verify the
-dataset, signing key, sdkconfig, bootloader/app signatures, partition boundaries,
-eFuse state, and the pre-lock reboot checkpoint.
+flash. Follow the complete [secure Wi-Fi and BLE Improv provisioning
+runbook](docs/secure-wifi-provisioning.md). Its guarded scripts verify the
+credential-free public build, signing key, sdkconfig, bootloader/app signatures,
+partition boundaries, eFuse state, and the pre-lock reboot checkpoint.
 
 Released firmware advertises an update entity in Home Assistant and checks the
 manifest at
@@ -161,89 +178,115 @@ the complete PEM file into that secret:
       --version 2 --scheme rsa3072 .firmware-signing-key.pem
 
 The key file is ignored by Git. Losing or replacing it prevents Secure-Boot
-devices from accepting any new firmware or dataset-migration image; USB does not
-bypass the hardware trust anchor. Already installed code keeps running. Keep an
-offline backup.
+devices from accepting any new production or recovery image; USB does not bypass
+the hardware trust anchor. Already installed code keeps running. Keep an offline
+backup.
 Pull requests build and cryptographically verify a hardware-Secure-Boot release
 with a throwaway key, while releases use only the configured Actions secret.
 
-### Discover another transmitter ID
+### Pair and remove buttons at runtime
 
-The first captured transmitter, ID 0xFB100, is checked in as Front Door Button.
-With logs open, press another bell push. A successfully decoded unconfigured
-button prints a message like:
+No real transmitter IDs are compiled into the public firmware. The component
+has capacity for eight stable Home Assistant sub-device slots, but advertises
+only paired slots through the native API. Empty slots therefore do not appear
+in Home Assistant. The runtime mapping is stored in ESPHome's NVS preferences.
+Managed production firmware protects NVS with hardware-backed encryption.
+Normal OTA updates and this project's guarded serial restore preserve that
+partition.
 
-    Unconfigured ActivLink doorbell id=0x8DF50; add activlink_id: 0x8DF50 ...
+Each slot also retains whether LOWBAT has ever been observed and its last value.
+The battery entity therefore restores its last known state after either the
+gateway or Home Assistant restarts. It remains unknown only until the first
+valid transmission from a newly paired or legacy-migrated button. NVS is written
+only when the battery state is first observed or changes.
 
-Add that value to [packages/core.yaml](packages/core.yaml), compile again, and
-Home Assistant will receive events from its new sub-device. The example 0x8DF50
-is from a public rtl_433 capture; it is not your ID.
+To pair using the Feather, briefly press and release **BOOT**, then press the
+ActivLink bell push within 30 seconds. The next valid doorbell ID is assigned to
+the first empty slot. Rename that slot in Home Assistant, for example from
+**ActivLink Button 1** to **Front Door**.
+
+To remove one, hold **BOOT** for at least three seconds, release it, then press
+the paired ActivLink bell push within 30 seconds. Removal is targeted by the RF
+ID, so it cannot accidentally remove a different slot. Do not hold BOOT while
+pressing RESET: GPIO9 is also the ESP32-C6 download-mode strap.
+
+Home Assistant exposes equivalent **Pair next ActivLink button**, **Remove an
+ActivLink button**, and **Cancel ActivLink pairing mode** controls. The
+**Pairing state** entity reports the active mode, result, or timeout. Pairing
+and removal consume the identifying RF press rather than emitting a doorbell
+event.
+
+In Home Assistant, trigger automations from the slot's **Press** event entity.
+A normal push has event type **ring**, matching Home Assistant's standard
+doorbell event, while the alternate ActivLink push has type **secret_press**.
+The entity state is the time of the latest event rather than an on/off value.
+
+Every ActivLink child device also exposes **Forget this button**. It immediately
+removes that slot without requiring a transmission, which covers lost, broken,
+or flat-battery transmitters. Forgetting clears the transmitter ID and retained
+LOWBAT value, cancels any active pairing/removal mode, and makes the slot
+available again. A successful pairing, removal, or forget operation briefly
+restarts the gateway so Home Assistant repeats native API discovery. Current
+Home Assistant releases then remove the unlinked slot's entities and child
+device from their registries. The forget action has no confirmation step in
+ESPHome.
+
+The first upgrade from a version with YAML-configured transmitters starts with
+an empty pairing table. Pair each existing transmitter once; all subsequent
+firmware updates retain that table. Pairing is passive learning of ActivLink's
+20-bit transmitter ID, not a two-way radio handshake.
+
+With logs open, an unpaired button prints a message like:
+
+    Unpaired ActivLink doorbell id=0x8DF50; start pairing and press it again
 
 If no ActivLink line appears, temporarily add **dump: raw** under
 **remote_receiver:** in packages/core.yaml. Raw timings around 160/320/480 µs
-confirm that the CC1101 data path works. Remove the raw dump after diagnosis
-because a long ActivLink broadcast produces a large log.
+confirm that the CC1101 data path works. Frequent 60--100 µs fragments indicate
+poor FSK discrimination; increasing the GPIO filter can merge real transitions
+and is not a substitute for adequate CC1101 channel bandwidth. Remove the raw
+dump after diagnosis because a long ActivLink broadcast produces a large log.
 
-### Add more buttons
+The ESP32-C6 receiver deliberately uses a 1,024-symbol RMT capture window with
+a 40 KiB software queue. Increasing `receive_symbols` to 4,096 is
+counterproductive here: ESPHome reserves the maximum capture size for every
+queued item, leaving room for only two items and causing `Buffer overflow`
+during the doorbell's repeated burst.
 
-For every additional transmitter, add another item to both the existing
-**esphome.devices** list and the existing **honeywell_activlink.buttons** list:
+## Wi-Fi onboarding after RF bring-up
 
-    esphome:
-      devices:
-        - id: back_door_button
-          name: Back Door Button
+The production configuration intentionally contains an empty `wifi:` block and
+BLE Improv. On a device without saved credentials, Improv advertises immediately.
+If a saved network cannot be reached, it advertises after 90 seconds. Briefly
+press **BOOT** to authorize a one-minute provisioning session, then send the new
+2.4 GHz credentials. An unprovisioned window closes after ten minutes; reset or
+power-cycle the gateway to reopen it.
 
-    honeywell_activlink:
-      buttons:
-        - activlink_id: 0x12345
-          event:
-            name: Press
-            device_id: back_door_button
-          battery_low:
-            name: Battery low
-            device_id: back_door_button
-            entity_category: diagnostic
-
-Merge these entries into the existing lists rather than adding duplicate
-top-level keys.
-
-## Thread after RF bring-up
-
-ESPHome can carry its native API over Thread on the C6; this is not Matter. You
-need a working Home Assistant Thread border router and the preferred network's
-active operational dataset.
-
-For a disposable development device, the example Thread configuration remains
-available. For a managed device, do not flash it directly. Copy the complete
-hex-encoded dataset TLV into `secrets.yaml`, then follow the [secure Thread
-runbook](docs/secure-thread-provisioning.md) to build and verify the private
-bootstrap, prove encrypted-NVS retention across a power cycle, install public
-production, and only then enable hardware Secure Boot.
-
-If the dataset changes later, a normal Thread Pending Operational Dataset is
-persisted automatically. Moving to an unrelated network uses a private,
-same-signing-key migration image; the runbook covers both online and USB paths
-and removal of the private image from both OTA slots.
+No SSID or password belongs in `secrets.yaml`, repository settings, or GitHub
+Actions. The release verifier rejects generated firmware if ESPHome adds a
+configured Wi-Fi station. The old `honeywell-gateway.thread.example.yaml` remains
+only as a legacy development example and is not used by production builds.
 
 ## Home Assistant diagnostics
 
-All checked-in profiles publish the no-extra-wiring diagnostics from
-`packages/diagnostics.yaml` once per minute. They include:
+Production profiles publish the no-extra-wiring diagnostics once per minute.
+They include:
 
 - ESP32-C6 uptime, die temperature, reset reason, heap health, and maximum
   component loop time;
-- Thread attachment and role, RLOC16, channel, partition, SRP state, attachment
-  duration, parent changes, attach attempts, IPv6 failures, and MAC retry/error
-  counters;
-- parent RLOC16, average RSSI, and link quality while the C6 is a Thread child;
-  these are unavailable when it is acting as a router or leader because those
-  roles do not have a parent;
-- ActivLink valid frames, rejected captures, duplicates, unconfigured IDs, and
-  the age of the last valid decoded frame.
+- Wi-Fi signal strength, IP address, SSID, BSSID, MAC address, and DNS server;
+- ActivLink valid frames, parity-valid candidate rows, rejected captures,
+  duplicates, unconfigured IDs, and the age of the last valid decoded frame;
+- a bounded timing summary of the most recent substantial capture that did not
+  contain a parity-valid ActivLink row, for diagnosing radio-profile or timing
+  mismatches without enabling the USB serial console.
 
 The counters start again after a reboot. All of these entities use Home
 Assistant's diagnostic category so they do not crowd the main device controls.
+The public production profile keeps the physical USB Serial/JTAG log sink at
+115200 baud so BLE Improv and Wi-Fi recovery remain observable when the
+encrypted ESPHome API is offline. Opening the USB console can reset the Feather;
+expect to see the complete boot and network onboarding sequence.
 Battery-voltage and CC1101 RSSI/frequency-error telemetry are intentionally left
 for a later revision. Moving GDO0 to GPIO14 makes the Feather's GPIO18/GPIO19
 I2C bus and onboard MAX17048 available, but its ESPHome integration still needs
@@ -265,10 +308,11 @@ and receive-state handling to be tested together.
 
 ## Tests
 
-The protocol tests compile the decoder as host C++ and generate the documented
-three-symbol FSK stream (HLL for 0 and HHL for 1). They cover the captured
-normal and secret frames plus inverted polarity, synthetic LOWBAT, repeated-row
-consensus, and parity cases:
+The host C++ tests cover both the runtime pairing table and the protocol
+decoder. Protocol vectors generate the documented three-symbol FSK stream (HLL
+for 0 and HHL for 1) and cover the captured normal and secret frames plus
+inverted polarity, synthetic LOWBAT, repeated-row consensus within and across
+RMT captures, per-burst deduplication, and parity cases:
 
     uv run pytest
 

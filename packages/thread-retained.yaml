@@ -1,8 +1,13 @@
+packages:
+  diagnostics: !include thread-diagnostics.yaml
+
 network:
   enable_ipv6: true
 
 openthread:
-  device_type: FTD
+  # Match the bootstrap/migration profile: the production gateway is an
+  # always-listening leaf and must not promote itself to a Thread router.
+  device_type: MTD
   # A public production image must not contain the private dataset. ESPHome
   # currently requires a TLV or network key at validation time, so use a
   # deliberately malformed one-byte TLV. A valid dataset already stored in NVS

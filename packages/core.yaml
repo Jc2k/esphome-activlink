@@ -3,16 +3,33 @@ packages:
 
 esphome:
   name: honeywell-activlink
+  # Derive a stable, collision-free hostname from the final three bytes of
+  # each Feather's hardware MAC, e.g. honeywell-activlink-829248.local.
+  name_add_mac_suffix: true
   friendly_name: Honeywell ActivLink Gateway
   min_version: 2026.7.3
   project:
     name: jc2k.esphome-activlink
     version: ${firmware_version}
   devices:
-    # Copy this entry and the corresponding honeywell_activlink button block
-    # for every physical transmitter.
-    - id: front_door_button
-      name: Front Door Button
+    # Runtime pairings map transmitters onto these stable Home Assistant
+    # sub-devices. Empty capacity slots are omitted from API discovery.
+    - id: activlink_button_1
+      name: ActivLink Button 1
+    - id: activlink_button_2
+      name: ActivLink Button 2
+    - id: activlink_button_3
+      name: ActivLink Button 3
+    - id: activlink_button_4
+      name: ActivLink Button 4
+    - id: activlink_button_5
+      name: ActivLink Button 5
+    - id: activlink_button_6
+      name: ActivLink Button 6
+    - id: activlink_button_7
+      name: ActivLink Button 7
+    - id: activlink_button_8
+      name: ActivLink Button 8
 
 esp32:
   variant: esp32c6
@@ -44,27 +61,195 @@ cc1101:
   modulation_type: 2-FSK
   fsk_deviation: 50kHz
   symbol_rate: 6250
-  filter_bandwidth: 203kHz
+  # Historical European ActivLink captures show roughly 65--73 kHz of tone/
+  # receiver offset. The CC1101 frequency compensator saturates at one quarter
+  # of the channel bandwidth with its current FOCCFG, so 203 kHz was too narrow
+  # (about +/-51 kHz). 325 kHz provides about +/-81 kHz of tracking margin.
+  filter_bandwidth: 325kHz
   sync_mode: "None"
 
 remote_receiver:
   id: activlink_receiver
   pin: ${cc1101_rx_pin}
+  # Keep the normal ESPHome glitch threshold. Raising this to 120 us swallowed
+  # real transitions in a marginal FSK stream and merged multiple symbols; RF
+  # channel bandwidth is the correct place to restore clean discrimination.
   filter: 50us
   idle: 3ms
   buffer_size: 40kb
-  receive_symbols: 4096
+  # A transmission contains many repeated 48-bit rows, but 4096 symbols made
+  # ESPHome reserve 16 KiB for every RMT capture. That left room for only two
+  # captures in this queue and dropped a busy ActivLink burst before decoding.
+  # 1024 symbols still holds roughly twenty rows (four matching rows suffice).
+  receive_symbols: 1024
   rmt_symbols: 96
+
+# The BOOT button is GPIO9 with an onboard pull-up. A normal click starts
+# pairing; holding it for three seconds starts targeted removal. Do not hold it
+# while resetting the Feather, because that requests the ROM download mode.
+binary_sensor:
+  - platform: gpio
+    id: activlink_pairing_control
+    internal: true
+    pin:
+      number: GPIO9
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+      - delayed_off: 30ms
+    on_click:
+      - min_length: 50ms
+        max_length: 1500ms
+        then:
+          - lambda: id(activlink_decoder).start_pairing();
+      - min_length: 3s
+        max_length: 10s
+        then:
+          - lambda: id(activlink_decoder).start_removal();
 
 honeywell_activlink:
   id: activlink_decoder
   receiver_id: activlink_receiver
-  buttons:
-    - activlink_id: 0xFB100
-      event:
+  pairing_timeout: 30s
+  pair_button:
+    name: Pair next ActivLink button
+  remove_button:
+    name: Remove an ActivLink button
+  cancel_button:
+    name: Cancel ActivLink pairing mode
+  pairing_state:
+    name: Pairing state
+  paired_count:
+    name: Paired buttons
+  slots:
+    - event:
         name: Press
-        device_id: front_door_button
+        device_id: activlink_button_1
       battery_low:
         name: Battery low
-        device_id: front_door_button
+        device_id: activlink_button_1
         entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_1
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_1
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_1
+    - event:
+        name: Press
+        device_id: activlink_button_2
+      battery_low:
+        name: Battery low
+        device_id: activlink_button_2
+        entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_2
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_2
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_2
+    - event:
+        name: Press
+        device_id: activlink_button_3
+      battery_low:
+        name: Battery low
+        device_id: activlink_button_3
+        entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_3
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_3
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_3
+    - event:
+        name: Press
+        device_id: activlink_button_4
+      battery_low:
+        name: Battery low
+        device_id: activlink_button_4
+        entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_4
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_4
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_4
+    - event:
+        name: Press
+        device_id: activlink_button_5
+      battery_low:
+        name: Battery low
+        device_id: activlink_button_5
+        entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_5
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_5
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_5
+    - event:
+        name: Press
+        device_id: activlink_button_6
+      battery_low:
+        name: Battery low
+        device_id: activlink_button_6
+        entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_6
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_6
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_6
+    - event:
+        name: Press
+        device_id: activlink_button_7
+      battery_low:
+        name: Battery low
+        device_id: activlink_button_7
+        entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_7
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_7
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_7
+    - event:
+        name: Press
+        device_id: activlink_button_8
+      battery_low:
+        name: Battery low
+        device_id: activlink_button_8
+        entity_category: diagnostic
+      paired:
+        name: Paired
+        device_id: activlink_button_8
+      transmitter_id:
+        name: Transmitter ID
+        device_id: activlink_button_8
+      forget_button:
+        name: Forget this button
+        device_id: activlink_button_8

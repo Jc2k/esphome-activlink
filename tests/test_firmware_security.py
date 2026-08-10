@@ -2,9 +2,12 @@ from pathlib import Path
 import sys
 
 import pytest
+import yaml
+from esphome import yaml_util
 
 
 ROOT = Path(__file__).parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from firmware_security import (  # noqa: E402
@@ -12,6 +15,9 @@ from firmware_security import (  # noqa: E402
     partition_layout,
     validate_private_inputs,
     validate_thread_dataset_tlv,
+)
+from components.honeywell_activlink.api_resource_patch import (  # noqa: E402
+    patch_api_resource,
 )
 
 
@@ -32,6 +38,99 @@ PARTIAL_DATASET = (
     "051062b2442a928d9ea3b947a1618fc4085a030f4f70656e5468726561642d39383733"
     "01029873"
 )
+
+
+class SecretsLoader(yaml.SafeLoader):
+    """Parse package YAML without resolving deployment-only secrets."""
+
+
+SecretsLoader.add_constructor(
+    "!secret", lambda loader, node: loader.construct_scalar(node)
+)
+SecretsLoader.add_constructor(
+    "!include", lambda loader, node: loader.construct_scalar(node)
+)
+
+
+def test_shared_firmware_uses_stable_mac_suffixed_hostname() -> None:
+    config = yaml_util.load_yaml(ROOT / "packages" / "core.yaml")
+
+    assert config["esphome"]["name"] == "honeywell-activlink"
+    assert config["esphome"]["name_add_mac_suffix"] is True
+
+
+@pytest.mark.parametrize("profile", ["thread.yaml", "thread-retained.yaml"])
+def test_gateway_is_an_always_listening_thread_leaf(profile: str) -> None:
+    source = (ROOT / "packages" / profile).read_text()
+    config = yaml.load(source, Loader=SecretsLoader)
+
+    assert config["openthread"]["device_type"] == "MTD"
+    # Omitting poll_period makes ESPHome configure an MTD with its receiver on
+    # while idle, rather than a sleepy end device.
+    assert "poll_period" not in config["openthread"]
+
+
+def test_thread_diagnostics_expose_selected_srp_server() -> None:
+    config = yaml_util.load_yaml(ROOT / "packages" / "thread-diagnostics.yaml")
+
+    assert config["thread_diagnostics"]["srp_server"]["name"] == "Thread SRP Server"
+
+
+def test_production_keeps_usb_console_logging_available() -> None:
+    source = (ROOT / "honeywell-gateway.release.yaml").read_text()
+    config = yaml.load(source, Loader=SecretsLoader)
+
+    assert config["logger"]["baud_rate"] == 115200
+
+
+def test_wifi_uses_physically_authorized_ble_improv_without_credentials() -> None:
+    source = (ROOT / "packages" / "wifi.yaml").read_text()
+    config = yaml.load(source, Loader=SecretsLoader)
+
+    assert "ssid" not in config["wifi"]
+    assert "password" not in config["wifi"]
+    assert "networks" not in config["wifi"]
+    assert config["esp32_improv"]["authorizer"] == "activlink_pairing_control"
+    assert config["provisioning"]["timeout"] == "10min"
+
+
+def test_activlink_rmt_queue_can_absorb_repeated_bursts() -> None:
+    config = yaml_util.load_yaml(ROOT / "packages" / "core.yaml")
+
+    # The CC1101's configured frequency compensator can track one quarter of
+    # the receive bandwidth. 325 kHz covers the 65--73 kHz offset observed in
+    # European ActivLink captures; the normal GPIO filter must not swallow
+    # marginal but real symbol transitions.
+    assert str(config["cc1101"]["filter_bandwidth"]) == "325kHz"
+    assert str(config["remote_receiver"]["filter"]) == "50us"
+    # ESPHome reserves four bytes per receive symbol for every queued capture.
+    # Keep a full ActivLink transmission while leaving several capture windows
+    # in the software ring; 4096 symbols allowed only two and overflowed live.
+    assert config["remote_receiver"]["receive_symbols"] == 1024
+    assert str(config["remote_receiver"]["buffer_size"]) == "40kb"
+
+
+def test_activlink_diagnostics_expose_burst_decoder_state() -> None:
+    config = yaml_util.load_yaml(ROOT / "packages" / "diagnostics.yaml")
+    activlink = config["honeywell_activlink"]
+
+    assert activlink["candidate_rows"]["name"] == "ActivLink Candidate Rows"
+    assert (
+        activlink["last_capture_summary"]["name"]
+        == "ActivLink Last Rejected Capture"
+    )
+
+
+def test_runtime_subdevice_api_patch_matches_pinned_esphome() -> None:
+    api_root = Path(__import__("esphome").__file__).parent / "components" / "api"
+
+    header = patch_api_resource("api_pb2.h", (api_root / "api_pb2.h").read_text())
+    connection = patch_api_resource(
+        "api_connection.cpp", (api_root / "api_connection.cpp").read_text()
+    )
+
+    assert "StaticVector<DeviceInfo, ESPHOME_DEVICE_COUNT> devices{};" in header
+    assert "resp.devices.emplace_next()" in connection
 
 
 def test_complete_thread_dataset_is_accepted() -> None:
@@ -91,7 +190,6 @@ def test_private_inputs_accept_realistic_non_placeholder_values(tmp_path: Path) 
     key.chmod(0o600)
     secrets = tmp_path / "secrets.yaml"
     secrets.write_text(
-        f'thread_tlv: "{COMPLETE_DATASET}"\n'
         'api_encryption_key: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="\n'
         'ota_password: "a-test-password-with-entropy"\n'
     )
@@ -113,7 +211,6 @@ def test_private_inputs_reject_placeholder_api_keys(
     key.chmod(0o600)
     secrets = tmp_path / "secrets.yaml"
     secrets.write_text(
-        f'thread_tlv: "{COMPLETE_DATASET}"\n'
         f'api_encryption_key: "{api_key}"\n'
         'ota_password: "a-test-password-with-entropy"\n'
     )

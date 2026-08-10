@@ -9,13 +9,18 @@ substitutions:
 
 packages:
   core: !include packages/core.yaml
-  network: !include packages/thread-retained.yaml
-  native_ipv6: !include packages/native-ipv6.yaml
+  network: !include packages/wifi.yaml
   security: !include packages/security-production.yaml
   updates: !include packages/managed-updates.yaml
 
 esphome:
   build_path: build/honeywell-activlink-production
 
-# The public image contains neither the Thread dataset nor API key. Both are
-# loaded from the encrypted NVS established by the private bootstrap image.
+# Keep production diagnostics available on the native USB Serial/JTAG console
+# so BLE Improv and Wi-Fi recovery remain observable when the native API is
+# offline.
+logger:
+  baud_rate: 115200
+
+# The public image contains no Wi-Fi credentials or API key. BLE Improv stores
+# Wi-Fi credentials at runtime; the API key is loaded from encrypted NVS.

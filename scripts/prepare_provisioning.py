@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the matched private bootstrap, public production, and migration set."""
+"""Build the matched private bootstrap, public production, and recovery set."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from firmware_security import (
 CONFIGS = {
     FirmwareProfile.BOOTSTRAP: ROOT / "honeywell-gateway.bootstrap.yaml",
     FirmwareProfile.PRODUCTION: ROOT / "honeywell-gateway.release.yaml",
-    FirmwareProfile.MIGRATION: ROOT / "honeywell-gateway.migration.yaml",
+    FirmwareProfile.RECOVERY: ROOT / "honeywell-gateway.recovery.yaml",
 }
 VERSION_PATTERN = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 VERSION_MARKER = 'firmware_version: "0.0.0-dev"'
@@ -118,7 +118,7 @@ def main() -> None:
         raise SystemExit(f"usage: {Path(sys.argv[0]).name} VERSION")
     manifest = prepare(sys.argv[1])
     print(f"Verified provisioning set written to {manifest.parent}")
-    print("Private bootstrap and migration artifacts must never be published.")
+    print("Private bootstrap and recovery artifacts must never be published.")
 
 
 if __name__ == "__main__":

@@ -43,6 +43,7 @@ CONF_KNOWN_ROUTER_COUNT = "known_router_count"
 CONF_REACHABLE_ROUTER_COUNT = "reachable_router_count"
 CONF_SRP_CLIENT_RUNNING = "srp_client_running"
 CONF_SRP_HOST_STATE = "srp_host_state"
+CONF_SRP_SERVER = "srp_server"
 
 thread_diagnostics_ns = cg.esphome_ns.namespace("thread_diagnostics")
 ThreadDiagnostics = thread_diagnostics_ns.class_(
@@ -81,6 +82,10 @@ CONFIG_SCHEMA = cv.Schema(
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
         cv.Optional(CONF_SRP_HOST_STATE): text_sensor.text_sensor_schema(
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        cv.Optional(CONF_SRP_SERVER): text_sensor.text_sensor_schema(
+            icon="mdi:dns",
             entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
         cv.Optional(CONF_ROUTER_NEIGHBORS): text_sensor.text_sensor_schema(
@@ -187,6 +192,7 @@ async def to_code(config):
         CONF_PARENT_RLOC16: "set_parent_rloc16_text_sensor",
         CONF_PARTITION_ID: "set_partition_id_text_sensor",
         CONF_SRP_HOST_STATE: "set_srp_host_state_text_sensor",
+        CONF_SRP_SERVER: "set_srp_server_text_sensor",
         CONF_ROUTER_NEIGHBORS: "set_router_neighbors_text_sensor",
         CONF_ROUTER_TABLE: "set_router_table_text_sensor",
     }

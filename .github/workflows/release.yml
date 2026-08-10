@@ -35,8 +35,8 @@ jobs:
         run: uv sync --locked
 
       - name: Create build-only secrets
-        # This contains only public test values, including OpenThread's
-        # documentation dataset. It must never be used to provision a device.
+        # This contains only public test values and no Wi-Fi credentials. It
+        # must never be used to provision a device.
         run: cp tests/secrets.ci.yaml secrets.yaml
 
       - name: Run protocol tests

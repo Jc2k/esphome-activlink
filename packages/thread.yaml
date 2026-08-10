@@ -1,7 +1,12 @@
+packages:
+  diagnostics: !include thread-diagnostics.yaml
+
 network:
   enable_ipv6: true
 
 openthread:
-  device_type: FTD
+  # This gateway is a leaf application, not mesh infrastructure. Keep it as
+  # an always-listening Minimal Thread Device so it stays attached to one of
+  # the border-router paths instead of promoting itself to a router.
+  device_type: MTD
   tlv: !secret thread_tlv
-

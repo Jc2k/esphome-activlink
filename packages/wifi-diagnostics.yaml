@@ -1,0 +1,17 @@
+sensor:
+  - platform: wifi_signal
+    name: Wi-Fi Signal
+    update_interval: 60s
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: Wi-Fi IP Address
+    ssid:
+      name: Wi-Fi SSID
+    bssid:
+      name: Wi-Fi BSSID
+    mac_address:
+      name: Wi-Fi MAC Address
+    dns_address:
+      name: Wi-Fi DNS Address

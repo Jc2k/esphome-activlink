@@ -24,7 +24,7 @@ SIGNING_KEY = ROOT / ".firmware-signing-key.pem"
 class FirmwareProfile(str, Enum):
     BOOTSTRAP = "bootstrap"
     PRODUCTION = "production"
-    MIGRATION = "migration"
+    RECOVERY = "recovery"
 
 
 BUILD_DIRECTORIES = {
@@ -36,10 +36,10 @@ BUILD_DIRECTORIES = {
     / ".esphome"
     / "build"
     / "honeywell-activlink-production",
-    FirmwareProfile.MIGRATION: ROOT
+    FirmwareProfile.RECOVERY: ROOT
     / ".esphome"
     / "build"
-    / "honeywell-activlink-migration",
+    / "honeywell-activlink-recovery",
 }
 
 
@@ -192,6 +192,10 @@ def verify_build(
     partition_bin = output / "partition_table" / "partition-table.bin"
     defines = build_root / "src" / "esphome" / "core" / "defines.h"
     generated_main = build_root / "src" / "main.cpp"
+    api_pb2 = build_root / "src" / "esphome" / "components" / "api" / "api_pb2.h"
+    api_connection = (
+        build_root / "src" / "esphome" / "components" / "api" / "api_connection.cpp"
+    )
     flasher_args = output / "flasher_args.json"
 
     required_files = [
@@ -205,6 +209,8 @@ def verify_build(
         partition_bin,
         defines,
         generated_main,
+        api_pb2,
+        api_connection,
         flasher_args,
     ]
     for path in required_files:
@@ -221,28 +227,32 @@ def verify_build(
 
     definitions = defines.read_text()
     generated_code = generated_main.read_text()
-    has_tlv = "USE_OPENTHREAD_TLVS" in definitions
-    is_forced = "USE_OPENTHREAD_FORCE_DATASET" in definitions
+    if "StaticVector<DeviceInfo, ESPHOME_DEVICE_COUNT> devices{};" not in api_pb2.read_text():
+        raise RuntimeError("firmware API cannot advertise only paired ActivLink sub-devices")
+    if "resp.devices.emplace_next()" not in api_connection.read_text():
+        raise RuntimeError("firmware API does not populate its dynamic sub-device list")
+    if "#define ESPHOME_NAME_ADD_MAC_SUFFIX" not in definitions:
+        raise RuntimeError(
+            "firmware must append its hardware MAC suffix to avoid hostname collisions"
+        )
+    if "#define USE_WIFI" not in definitions or "#define USE_IMPROV" not in definitions:
+        raise RuntimeError("firmware must support credential-free Wi-Fi onboarding through BLE Improv")
+    if "USE_OPENTHREAD" in definitions or "USE_OPENTHREAD_TLVS" in definitions:
+        raise RuntimeError("Wi-Fi firmware unexpectedly includes OpenThread support or a Thread dataset")
+    if "->init_sta(" in generated_code or "->add_sta(" in generated_code:
+        raise RuntimeError("firmware embeds a configured Wi-Fi station network")
     if "USE_API_NOISE_PSK_FROM_YAML" in definitions:
         raise RuntimeError(
             "API key must be saved to and loaded from encrypted NVS, not configured in api:"
         )
-    if not has_tlv:
-        raise RuntimeError("security check failed: build has no compiled Thread TLV")
     if profile is FirmwareProfile.PRODUCTION:
-        if '#define USE_OPENTHREAD_TLVS "00"' not in definitions or is_forced:
-            raise RuntimeError("production build does not use the fail-closed Thread sentinel")
         if "USE_API_USER_DEFINED_ACTIONS" not in definitions:
             raise RuntimeError("production build is missing the signed recovery action")
         if "->set_api_encryption_key(" in generated_code:
             raise RuntimeError("production build embeds a private API encryption key")
-    elif profile is FirmwareProfile.MIGRATION:
-        if not is_forced or '#define USE_OPENTHREAD_TLVS "00"' in definitions:
-            raise RuntimeError("migration build does not force the private Thread dataset")
+    elif profile is FirmwareProfile.RECOVERY:
         if "->set_api_encryption_key(" not in generated_code:
-            raise RuntimeError("migration build cannot restore the saved API encryption key")
-    elif is_forced:
-        raise RuntimeError("bootstrap build must not force the dataset after its first boot")
+            raise RuntimeError("recovery build cannot restore the saved API encryption key")
     elif "->set_api_encryption_key(" not in generated_code:
         raise RuntimeError("bootstrap build cannot persist the API encryption key")
 
@@ -254,6 +264,12 @@ def verify_build(
     layout = partition_layout(partition_csv, table_offset)
     if "nvs" not in layout:
         raise RuntimeError("partition table has no NVS partition")
+    app0_offset, app0_size = layout["app0"]
+    minimum_app_headroom = 0x8000
+    if application.stat().st_size + minimum_app_headroom > app0_size:
+        raise RuntimeError(
+            "signed application leaves less than 32 KiB of OTA partition headroom"
+        )
     nvs_offset, _ = layout["nvs"]
     if factory_firmware.stat().st_size > nvs_offset:
         raise RuntimeError(
@@ -264,7 +280,7 @@ def verify_build(
     expected_regions = {
         0: bootloader.read_bytes(),
         table_offset: partition_bin.read_bytes(),
-        layout["app0"][0]: application.read_bytes(),
+        app0_offset: application.read_bytes(),
     }
     for offset, expected in expected_regions.items():
         if factory[offset : offset + len(expected)] != expected:
@@ -352,8 +368,6 @@ def validate_private_inputs(
     secrets = yaml.safe_load(secrets_file.read_text())
     if not isinstance(secrets, dict):
         raise ValueError("secrets.yaml must contain a mapping")
-    validate_thread_dataset_tlv(secrets.get("thread_tlv"))
-
     api_key = secrets.get("api_encryption_key")
     if not isinstance(api_key, str):
         raise ValueError("api_encryption_key must be a base64 string")
@@ -373,4 +387,4 @@ def assert_matching_partitions(builds: list[VerifiedBuild]) -> None:
     fingerprints = {build.partition_sha256 for build in builds}
     offsets = {build.nvs_offset for build in builds}
     if len(fingerprints) != 1 or len(offsets) != 1:
-        raise RuntimeError("bootstrap, production, and migration partition layouts differ")
+        raise RuntimeError("bootstrap, production, and recovery partition layouts differ")

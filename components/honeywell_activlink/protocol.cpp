@@ -1,6 +1,10 @@
 #include "protocol.h"
 
+#include <algorithm>
+#include <cinttypes>
 #include <cstddef>
+#include <cstdio>
+#include <limits>
 
 namespace esphome::honeywell_activlink {
 namespace {
@@ -106,15 +110,25 @@ bool decode_at(const std::vector<int32_t> &timings, size_t start, ActivLinkFrame
 
 }  // namespace
 
-bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame) {
-  std::vector<FrameCount> candidates;
-
+size_t decode_activlink_rows(const std::vector<int32_t> &timings,
+                            std::vector<ActivLinkFrame> *frames) {
+  frames->clear();
   for (size_t start = 0; start < timings.size(); start++) {
     ActivLinkFrame candidate{};
     if (!decode_at(timings, start, &candidate)) {
       continue;
     }
+    frames->push_back(candidate);
+  }
+  return frames->size();
+}
 
+bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame) {
+  std::vector<ActivLinkFrame> rows;
+  decode_activlink_rows(timings, &rows);
+  std::vector<FrameCount> candidates;
+
+  for (const auto &candidate : rows) {
     bool found = false;
     for (auto &entry : candidates) {
       if (!(entry.frame == candidate)) {
@@ -134,6 +148,94 @@ bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame
     }
   }
   return false;
+}
+
+void ActivLinkBurstDecoder::reset() {
+  for (auto &candidate : this->candidates_) {
+    candidate = {};
+  }
+}
+
+bool ActivLinkBurstDecoder::decode(const std::vector<int32_t> &timings,
+                                  uint32_t now, ActivLinkFrame *frame,
+                                  size_t *candidate_rows) {
+  std::vector<ActivLinkFrame> rows;
+  decode_activlink_rows(timings, &rows);
+  if (candidate_rows != nullptr) {
+    *candidate_rows = rows.size();
+  }
+
+  // The asynchronous CC1101 output also produces captures for unrelated RF
+  // activity. Those captures must not keep an already-emitted button frame
+  // alive indefinitely. Expire consensus per decoded frame, before considering
+  // the rows in this capture.
+  for (auto &candidate : this->candidates_) {
+    if (candidate.count != 0 && now - candidate.last_seen_ms > BURST_GAP_MS) {
+      candidate = {};
+    }
+  }
+
+  for (const auto &row : rows) {
+    Candidate *match = nullptr;
+    Candidate *replacement = &this->candidates_[0];
+    for (auto &candidate : this->candidates_) {
+      if (candidate.count != 0 && candidate.frame == row) {
+        match = &candidate;
+        break;
+      }
+      if (candidate.count == 0 || candidate.count < replacement->count) {
+        replacement = &candidate;
+      }
+    }
+
+    if (match == nullptr) {
+      match = replacement;
+      *match = {row, 1, false, now};
+    } else if (match->count < std::numeric_limits<uint8_t>::max()) {
+      match->count++;
+    }
+    match->last_seen_ms = now;
+
+    if (match->count >= MINIMUM_REPEATS && !match->emitted) {
+      match->emitted = true;
+      *frame = row;
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string summarize_activlink_capture(const std::vector<int32_t> &timings) {
+  size_t short_count = 0;
+  size_t long_count = 0;
+  size_t sync_count = 0;
+  size_t other_count = 0;
+  for (int32_t timing : timings) {
+    if (is_short(timing)) {
+      short_count++;
+    } else if (is_long(timing)) {
+      long_count++;
+    } else if (is_sync(timing)) {
+      sync_count++;
+    } else {
+      other_count++;
+    }
+  }
+
+  char counts[112];
+  std::snprintf(counts, sizeof(counts), "n=%u short=%u long=%u sync=%u other=%u head=",
+                static_cast<unsigned>(timings.size()), static_cast<unsigned>(short_count),
+                static_cast<unsigned>(long_count), static_cast<unsigned>(sync_count),
+                static_cast<unsigned>(other_count));
+  std::string summary{counts};
+
+  const size_t head_size = std::min<size_t>(timings.size(), 12);
+  for (size_t i = 0; i < head_size; i++) {
+    char timing[18];
+    std::snprintf(timing, sizeof(timing), "%s%" PRId32, i == 0 ? "" : ",", timings[i]);
+    summary.append(timing);
+  }
+  return summary;
 }
 
 }  // namespace esphome::honeywell_activlink

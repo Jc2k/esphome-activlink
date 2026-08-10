@@ -82,8 +82,8 @@ def build_firmware(version: str) -> tuple[Path, Path]:
 
     # Do not publish merely because ESPHome returned successfully. Prove that
     # NVS encryption, hardware Secure Boot V2, Secure Download mode, the signed
-    # bootloader/app, the fail-closed Thread sentinel, and the NVS boundary are
-    # all present in the artifacts that will actually be released.
+    # bootloader/app, credential-free BLE Improv onboarding, and the NVS
+    # boundary are all present in the artifacts that will actually be released.
     build = verify_build(FirmwareProfile.PRODUCTION, SIGNING_KEY)
     return build.ota_firmware, build.factory_firmware
 
@@ -137,7 +137,8 @@ def prepare_assets(version: str, ota_firmware: Path, factory_firmware: Path) -> 
         f'<p><a href="firmware/v{version}/{factory_firmware_name}">'
         "Hardware-Secure-Boot factory firmware</a></p>\n"
         "<p>Provision a private bootstrap image first. This public image "
-        "intentionally contains no Thread dataset.</p>\n"
+        "intentionally contains no Wi-Fi credentials or API key; use BLE "
+        "Improv to onboard it.</p>\n"
         '<p><a href="firmware/manifest.json">OTA manifest</a></p>\n'
     )
 

@@ -5,6 +5,7 @@
 #include <esp_openthread.h>
 #include <esp_openthread_lock.h>
 #include <freertos/FreeRTOS.h>
+#include <openthread/ip6.h>
 #include <openthread/link.h>
 #include <openthread/srp_client.h>
 #include <openthread/thread.h>
@@ -53,6 +54,7 @@ struct ThreadSnapshot {
   bool router_table_valid{false};
   bool srp_client_running{false};
   std::string srp_host_state{"disabled"};
+  std::string srp_server{"unavailable"};
   std::string router_neighbors{"unavailable"};
   std::string router_table{"unavailable"};
 };
@@ -88,6 +90,18 @@ std::string format_hex32(uint32_t value) {
   char buffer[11];
   std::snprintf(buffer, sizeof(buffer), "0x%08" PRIX32, value);
   return buffer;
+}
+
+std::string format_srp_server(const otSockAddr *server) {
+  if (server == nullptr || otIp6IsAddressUnspecified(&server->mAddress)) {
+    return "unavailable";
+  }
+
+  char address[OT_IP6_ADDRESS_STRING_SIZE];
+  otIp6AddressToString(&server->mAddress, address, sizeof(address));
+  char endpoint[OT_IP6_ADDRESS_STRING_SIZE + 10];
+  std::snprintf(endpoint, sizeof(endpoint), "[%s]:%u", address, server->mPort);
+  return endpoint;
 }
 
 void append_summary(std::string &summary, const char *entry) {
@@ -146,6 +160,7 @@ void collect_router_neighbors(otInstance *instance, ThreadSnapshot &snapshot) {
   }
 }
 
+#if defined(CONFIG_OPENTHREAD_FTD) && CONFIG_OPENTHREAD_FTD
 void collect_router_table(otInstance *instance, ThreadSnapshot &snapshot) {
   if (snapshot.role != OT_DEVICE_ROLE_ROUTER && snapshot.role != OT_DEVICE_ROLE_LEADER) {
     return;
@@ -185,6 +200,7 @@ void collect_router_table(otInstance *instance, ThreadSnapshot &snapshot) {
     snapshot.router_table = "none";
   }
 }
+#endif
 
 }  // namespace
 
@@ -232,7 +248,9 @@ void ThreadDiagnostics::update() {
 
   if (attached) {
     collect_router_neighbors(instance, snapshot);
+#if defined(CONFIG_OPENTHREAD_FTD) && CONFIG_OPENTHREAD_FTD
     collect_router_table(instance, snapshot);
+#endif
   }
 
   if (const otMleCounters *counters = otThreadGetMleCounters(instance); counters != nullptr) {
@@ -254,9 +272,14 @@ void ThreadDiagnostics::update() {
   if (const otSrpClientHostInfo *host_info = otSrpClientGetHostInfo(instance); host_info != nullptr) {
     snapshot.srp_host_state = otSrpClientItemStateToString(host_info->mState);
   }
+  snapshot.srp_server = format_srp_server(otSrpClientGetServerAddress(instance));
 #endif
 
   esp_openthread_lock_release();
+
+  ESP_LOGI(TAG, "Role=%s attached=%s SRP running=%s host=%s server=%s", role_to_string(snapshot.role),
+           attached ? "yes" : "no", snapshot.srp_client_running ? "yes" : "no", snapshot.srp_host_state.c_str(),
+           snapshot.srp_server.c_str());
 
   if (this->attached_binary_sensor_ != nullptr) {
     this->attached_binary_sensor_->publish_state(attached);
@@ -280,6 +303,9 @@ void ThreadDiagnostics::update() {
   }
   if (this->srp_host_state_text_sensor_ != nullptr) {
     this->srp_host_state_text_sensor_->publish_state(snapshot.srp_host_state);
+  }
+  if (this->srp_server_text_sensor_ != nullptr) {
+    this->srp_server_text_sensor_->publish_state(snapshot.srp_server);
   }
   if (this->router_neighbors_text_sensor_ != nullptr) {
     this->router_neighbors_text_sensor_->publish_state(snapshot.router_neighbors_valid ? snapshot.router_neighbors

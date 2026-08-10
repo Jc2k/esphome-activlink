@@ -105,7 +105,7 @@ def load_manifest(path: Path) -> tuple[dict[str, object], str]:
     profiles = manifest.get("profiles")
     if not isinstance(profiles, dict):
         raise RuntimeError("manifest has no firmware profiles")
-    for profile in ("bootstrap", "production", "migration"):
+    for profile in ("bootstrap", "production", "recovery"):
         profile_data = profiles.get(profile)
         if not isinstance(profile_data, dict):
             raise RuntimeError(f"manifest has no {profile} profile")
@@ -194,12 +194,12 @@ def command_flash_bootstrap(args: argparse.Namespace) -> None:
         manifest_sha256=manifest_hash,
         version=manifest["version"],
     )
-    print("Bootstrap flashed. Let it boot, attach to Thread, then power-cycle it once.")
+    print("Bootstrap flashed. Provision Wi-Fi with BLE Improv, verify the API, then power-cycle it once.")
 
 
 def command_verify_bootstrap(args: argparse.Namespace) -> None:
-    if not args.confirm_dataset_retained:
-        raise RuntimeError("refusing checkpoint without --confirm-dataset-retained")
+    if not args.confirm_nvs_retained:
+        raise RuntimeError("refusing checkpoint without --confirm-nvs-retained")
     _manifest, manifest_hash = load_manifest(args.manifest)
     state = load_state(args.state)
     if state.get("stage") != "bootstrap_flashed" or state.get("manifest_sha256") != manifest_hash:
@@ -211,7 +211,7 @@ def command_verify_bootstrap(args: argparse.Namespace) -> None:
         raise RuntimeError("Secure Boot became enabled before the production checkpoint")
     require_key0(info, {"HMAC_UP"})
     save_state(args.state, stage="bootstrap_verified")
-    print("Checkpoint recorded: encrypted NVS key exists and the dataset survived a reboot.")
+    print("Checkpoint recorded: the encrypted NVS key and provisioned credentials survived a reboot.")
 
 
 def command_flash_production(args: argparse.Namespace) -> None:
@@ -252,9 +252,9 @@ def command_verify_production(args: argparse.Namespace) -> None:
     print("Provisioning complete: encrypted NVS, hardware Secure Boot, and Secure Download are enabled.")
 
 
-def command_flash_migration(args: argparse.Namespace) -> None:
+def command_flash_recovery(args: argparse.Namespace) -> None:
     if not args.confirm_preserve_nvs:
-        raise RuntimeError("refusing migration flash without --confirm-preserve-nvs")
+        raise RuntimeError("refusing recovery flash without --confirm-preserve-nvs")
     manifest, _manifest_hash = load_manifest(args.manifest)
     info = security_info(args.port)
     if not info.secure_boot:
@@ -262,8 +262,8 @@ def command_flash_migration(args: argparse.Namespace) -> None:
     if not info.secure_download:
         raise RuntimeError("Secure ROM Download mode is not enabled")
     require_key0(info, {"HMAC_UP"})
-    write_factory(args.port, artifact_path(args.manifest, manifest, "migration"), erase_all=False)
-    print("Signed migration image flashed without erasing NVS; it will replace the dataset on boot.")
+    write_factory(args.port, artifact_path(args.manifest, manifest, "recovery"), erase_all=False)
+    print("Signed private recovery image flashed without erasing NVS.")
 
 
 def command_restore_production(args: argparse.Namespace) -> None:
@@ -295,9 +295,9 @@ def parser() -> argparse.ArgumentParser:
     bootstrap.set_defaults(handler=command_flash_bootstrap)
 
     verify_bootstrap = commands.add_parser(
-        "verify-bootstrap", help="record the NVS/dataset checkpoint"
+        "verify-bootstrap", help="record the encrypted-NVS credential checkpoint"
     )
-    verify_bootstrap.add_argument("--confirm-dataset-retained", action="store_true")
+    verify_bootstrap.add_argument("--confirm-nvs-retained", action="store_true")
     verify_bootstrap.set_defaults(handler=command_verify_bootstrap)
 
     production = commands.add_parser(
@@ -311,15 +311,15 @@ def parser() -> argparse.ArgumentParser:
     )
     verify_production.set_defaults(handler=command_verify_production)
 
-    migration = commands.add_parser(
-        "flash-migration", help="USB recovery for a locked device with an obsolete dataset"
+    recovery = commands.add_parser(
+        "flash-recovery", help="restore the API key on a locked device after NVS damage"
     )
-    migration.add_argument("--confirm-preserve-nvs", action="store_true")
-    migration.set_defaults(handler=command_flash_migration)
+    recovery.add_argument("--confirm-preserve-nvs", action="store_true")
+    recovery.set_defaults(handler=command_flash_recovery)
 
     restore = commands.add_parser(
         "restore-production",
-        help="replace a migration image on a locked device while preserving NVS",
+        help="replace a recovery image on a locked device while preserving NVS",
     )
     restore.add_argument("--confirm-preserve-nvs", action="store_true")
     restore.set_defaults(handler=command_restore_production)

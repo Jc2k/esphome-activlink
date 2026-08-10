@@ -9,18 +9,15 @@ substitutions:
 
 packages:
   core: !include packages/core.yaml
-  network: !include packages/thread.yaml
-  native_ipv6: !include packages/native-ipv6.yaml
+  network: !include packages/wifi.yaml
   security: !include packages/security-production.yaml
   updates: !include packages/managed-updates.yaml
 
 esphome:
-  build_path: build/honeywell-activlink-migration
+  build_path: build/honeywell-activlink-recovery
 
-# Unlike the one-time bootstrap, this image is hardware-Secure-Boot compatible
-# and deliberately replaces a dataset already stored in encrypted NVS.
-openthread:
-  force_dataset: true
-
+# This private, hardware-Secure-Boot-compatible recovery image can restore the
+# saved API key after NVS damage. Wi-Fi is still provisioned only through BLE
+# Improv, so the image contains no network credential.
 honeywell_activlink:
   api_encryption_key: !secret api_encryption_key

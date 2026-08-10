@@ -1,0 +1,22 @@
+packages:
+  diagnostics: !include wifi-diagnostics.yaml
+
+# Deliberately declare no networks here. BLE Improv supplies the SSID and
+# password at runtime, and ESPHome retains them in the HMAC-encrypted NVS
+# partition. Public release artifacts therefore contain no Wi-Fi credential.
+wifi:
+  reboot_timeout: 15min
+  power_save_mode: LIGHT
+
+# Require physical presence before accepting credentials. The existing BOOT
+# button remains the ActivLink pairing/removal control after onboarding.
+esp32_improv:
+  authorizer: activlink_pairing_control
+  authorized_duration: 1min
+  wifi_timeout: 90s
+
+# A keyless public image can also receive its native-API Noise key from Home
+# Assistant after Wi-Fi onboarding. Existing devices keep loading their saved
+# key from encrypted NVS. Resetting the board reopens an expired window.
+provisioning:
+  timeout: 10min

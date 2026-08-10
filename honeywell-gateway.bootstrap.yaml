@@ -9,14 +9,14 @@ substitutions:
 
 packages:
   core: !include packages/core.yaml
-  network: !include packages/thread.yaml
+  network: !include packages/wifi.yaml
   security: !include packages/security-bootstrap.yaml
 
 esphome:
   build_path: build/honeywell-activlink-bootstrap
 
-# Persist the existing Home Assistant API key into encrypted NVS alongside the
-# Thread dataset. Neither value is present in the later public image.
+# Persist the existing Home Assistant API key into encrypted NVS. Wi-Fi
+# credentials arrive separately through BLE Improv and are never compiled in.
 honeywell_activlink:
   api_encryption_key: !secret api_encryption_key
 

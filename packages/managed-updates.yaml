@@ -1,9 +1,8 @@
 http_request:
   verify_ssl: true
   timeout: 30s
-  # Keep the task watchdog beyond the complete request timeout. Thread's
-  # lower throughput otherwise lets a healthy 256-byte OTA read trip the
-  # ESP-IDF default 5-second watchdog before ESPHome can report a timeout.
+  # Keep the task watchdog beyond the complete request timeout so a slow OTA
+  # read can report a network timeout instead of tripping the task watchdog.
   watchdog_timeout: 45s
 
 update:
@@ -15,9 +14,9 @@ ota:
   - id: managed_http_ota
     platform: http_request
 
-# This authenticated native-API action is the private recovery path for a
-# future dataset migration. Signature verification remains the authority: MD5
-# catches transfer errors, while Secure Boot rejects an untrusted image.
+# This authenticated native-API action is the private recovery path. Signature
+# verification remains the authority: MD5 catches transfer errors, while
+# Secure Boot rejects an untrusted image.
 api:
   actions:
     - action: install_signed_firmware

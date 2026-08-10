@@ -19,6 +19,7 @@ class ThreadDiagnostics : public PollingComponent {
   void set_parent_rloc16_text_sensor(text_sensor::TextSensor *sensor) { this->parent_rloc16_text_sensor_ = sensor; }
   void set_partition_id_text_sensor(text_sensor::TextSensor *sensor) { this->partition_id_text_sensor_ = sensor; }
   void set_srp_host_state_text_sensor(text_sensor::TextSensor *sensor) { this->srp_host_state_text_sensor_ = sensor; }
+  void set_srp_server_text_sensor(text_sensor::TextSensor *sensor) { this->srp_server_text_sensor_ = sensor; }
   void set_router_neighbors_text_sensor(text_sensor::TextSensor *sensor) {
     this->router_neighbors_text_sensor_ = sensor;
   }
@@ -60,6 +61,7 @@ class ThreadDiagnostics : public PollingComponent {
   text_sensor::TextSensor *parent_rloc16_text_sensor_{nullptr};
   text_sensor::TextSensor *partition_id_text_sensor_{nullptr};
   text_sensor::TextSensor *srp_host_state_text_sensor_{nullptr};
+  text_sensor::TextSensor *srp_server_text_sensor_{nullptr};
   text_sensor::TextSensor *router_neighbors_text_sensor_{nullptr};
   text_sensor::TextSensor *router_table_text_sensor_{nullptr};
 

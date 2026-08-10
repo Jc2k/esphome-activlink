@@ -1,6 +1,6 @@
 # This profile is irreversible on first boot. Use it only after the bootstrap
-# image has created the HMAC_UP key in eFuse BLOCK_KEY0 and retained its Thread
-# dataset over a second boot. See docs/secure-thread-provisioning.md.
+# image has created the HMAC_UP key in eFuse BLOCK_KEY0 and retained encrypted
+# NVS over a second boot. See docs/secure-wifi-provisioning.md.
 esp32:
   framework:
     advanced:
