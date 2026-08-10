@@ -119,6 +119,10 @@ def test_activlink_diagnostics_expose_burst_decoder_state() -> None:
         activlink["last_capture_summary"]["name"]
         == "ActivLink Last Rejected Capture"
     )
+    assert activlink["radio_recoveries"]["name"] == "ActivLink Radio Recoveries"
+
+    core = yaml_util.load_yaml(ROOT / "packages" / "core.yaml")
+    assert core["honeywell_activlink"]["radio_id"] == "activlink_radio"
 
 
 def test_runtime_subdevice_api_patch_matches_pinned_esphome() -> None:

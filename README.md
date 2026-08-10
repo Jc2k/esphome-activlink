@@ -99,6 +99,12 @@ PWM frame many times. The decoder:
    LOWBAT flags;
 5. ignores non-doorbell ActivLink device types.
 
+Because asynchronous reception remains in RX continuously, the component also
+recognizes the CC1101's documented frequency-offset-loop collapse signature.
+It restarts RX after such a rejected capture, clearing the stale frequency
+estimate quickly enough to receive later rows from the same repeated broadcast.
+The **ActivLink Radio Recoveries** diagnostic counts these restarts.
+
 This follows the published
 [ActivLink frame analysis](https://github.com/klohner/honeywell-wireless-doorbell)
 and the maintained

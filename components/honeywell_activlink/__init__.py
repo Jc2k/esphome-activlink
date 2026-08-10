@@ -5,6 +5,7 @@ from esphome.components import (
     api,
     binary_sensor,
     button,
+    cc1101,
     event,
     remote_base,
     sensor,
@@ -25,7 +26,7 @@ from esphome.const import (
 from .api_resource_patch import install_dynamic_device_info_patch
 
 AUTO_LOAD = ["binary_sensor", "button", "event", "sensor", "text_sensor"]
-DEPENDENCIES = ["api", "remote_receiver"]
+DEPENDENCIES = ["api", "cc1101", "remote_receiver"]
 
 CONF_API_ENCRYPTION_KEY = "api_encryption_key"
 CONF_BATTERY_LOW = "battery_low"
@@ -45,6 +46,8 @@ CONF_PAIRED_COUNT = "paired_count"
 CONF_PAIRING_STATE = "pairing_state"
 CONF_PAIRING_TIMEOUT = "pairing_timeout"
 CONF_REMOVE_BUTTON = "remove_button"
+CONF_RADIO_ID = "radio_id"
+CONF_RADIO_RECOVERIES = "radio_recoveries"
 CONF_RELAY_DEDUPLICATION = "relay_deduplication"
 CONF_SLOTS = "slots"
 CONF_TRANSMITTER_ID = "transmitter_id"
@@ -102,6 +105,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.GenerateID(remote_base.CONF_RECEIVER_ID): cv.use_id(
             remote_base.RemoteReceiverBase
         ),
+        cv.Required(CONF_RADIO_ID): cv.use_id(cc1101.CC1101Component),
         cv.Required(CONF_SLOTS): cv.All(
             cv.ensure_list(SLOT_SCHEMA),
             cv.Length(min=MAX_PAIRED_BUTTONS, max=MAX_PAIRED_BUTTONS),
@@ -151,6 +155,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_CANDIDATE_ROWS): _counter_schema(),
         cv.Optional(CONF_DUPLICATE_FRAMES): _counter_schema(),
         cv.Optional(CONF_UNCONFIGURED_FRAMES): _counter_schema(),
+        cv.Optional(CONF_RADIO_RECOVERIES): _counter_schema(),
         cv.Optional(CONF_LAST_VALID_FRAME_AGE): sensor.sensor_schema(
             unit_of_measurement=UNIT_SECOND,
             icon=ICON_TIMER,
@@ -171,6 +176,8 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
     await remote_base.register_listener(var, config)
+    radio = await cg.get_variable(config[CONF_RADIO_ID])
+    cg.add(var.set_radio(radio))
     cg.add(var.set_deduplication(config[CONF_DEDUPLICATION]))
     cg.add(var.set_relay_deduplication(config[CONF_RELAY_DEDUPLICATION]))
     cg.add(var.set_pairing_timeout(config[CONF_PAIRING_TIMEOUT]))
@@ -222,6 +229,7 @@ async def to_code(config):
         CONF_CANDIDATE_ROWS: "set_candidate_rows_sensor",
         CONF_DUPLICATE_FRAMES: "set_duplicate_frames_sensor",
         CONF_UNCONFIGURED_FRAMES: "set_unconfigured_frames_sensor",
+        CONF_RADIO_RECOVERIES: "set_radio_recoveries_sensor",
         CONF_LAST_VALID_FRAME_AGE: "set_last_valid_frame_age_sensor",
     }
     for key, setter in diagnostic_sensors.items():

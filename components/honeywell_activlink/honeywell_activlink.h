@@ -3,6 +3,7 @@
 #include "esphome/components/api/api_server.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/button/button.h"
+#include "esphome/components/cc1101/cc1101.h"
 #include "esphome/components/event/event.h"
 #include "esphome/components/remote_base/remote_base.h"
 #include "esphome/components/sensor/sensor.h"
@@ -75,6 +76,7 @@ class ActivLinkComponent : public Component, public remote_base::RemoteReceiverL
   }
   void set_pairing_timeout(uint32_t timeout_ms) { pairing_timeout_ms_ = timeout_ms; }
   void set_diagnostic_update_interval(uint32_t interval_ms) { diagnostic_update_interval_ms_ = interval_ms; }
+  void set_radio(cc1101::CC1101Component *radio) { radio_ = radio; }
   void set_pairing_state_text_sensor(text_sensor::TextSensor *sensor) { pairing_state_text_sensor_ = sensor; }
   void set_paired_count_sensor(sensor::Sensor *sensor) { paired_count_sensor_ = sensor; }
   void set_valid_frames_sensor(sensor::Sensor *sensor) { valid_frames_sensor_ = sensor; }
@@ -86,6 +88,7 @@ class ActivLinkComponent : public Component, public remote_base::RemoteReceiverL
   void set_last_capture_summary_text_sensor(text_sensor::TextSensor *sensor) {
     last_capture_summary_text_sensor_ = sensor;
   }
+  void set_radio_recoveries_sensor(sensor::Sensor *sensor) { radio_recoveries_sensor_ = sensor; }
 
   void setup() override;
   void loop() override;
@@ -131,9 +134,12 @@ class ActivLinkComponent : public Component, public remote_base::RemoteReceiverL
   static_assert(sizeof(StoredPairingsV1) == 40, "legacy pairing storage layout changed");
   static_assert(sizeof(StoredPairings) == 44, "pairing storage layout changed");
 
+  static constexpr uint32_t RADIO_RECOVERY_COOLDOWN_MS = 5000;
+
   std::vector<Slot> slots_{};
   PairingTable pairings_{};
   ActivLinkBurstDecoder burst_decoder_{};
+  cc1101::CC1101Component *radio_{nullptr};
   ESPPreferenceObject pairing_preference_{};
   api::psk_t api_encryption_key_{};
   bool persist_api_encryption_key_{false};
@@ -149,14 +155,19 @@ class ActivLinkComponent : public Component, public remote_base::RemoteReceiverL
   uint32_t candidate_rows_{0};
   uint32_t duplicate_frames_{0};
   uint32_t unconfigured_frames_{0};
+  uint32_t radio_recoveries_{0};
+  uint32_t last_radio_recovery_ms_{0};
   uint32_t last_valid_frame_ms_{0};
   bool has_valid_frame_{false};
   bool discovery_refresh_pending_{false};
+  bool radio_recovery_pending_{false};
+  bool has_radio_recovery_{false};
   sensor::Sensor *valid_frames_sensor_{nullptr};
   sensor::Sensor *decode_failures_sensor_{nullptr};
   sensor::Sensor *candidate_rows_sensor_{nullptr};
   sensor::Sensor *duplicate_frames_sensor_{nullptr};
   sensor::Sensor *unconfigured_frames_sensor_{nullptr};
+  sensor::Sensor *radio_recoveries_sensor_{nullptr};
   sensor::Sensor *last_valid_frame_age_sensor_{nullptr};
   sensor::Sensor *paired_count_sensor_{nullptr};
   text_sensor::TextSensor *pairing_state_text_sensor_{nullptr};

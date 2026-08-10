@@ -150,6 +150,34 @@ bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame
   return false;
 }
 
+bool activlink_capture_has_demodulator_collapse(const std::vector<int32_t> &timings) {
+  if (timings.size() < 80) {
+    return false;
+  }
+
+  size_t short_positive = 0;
+  size_t short_negative = 0;
+  size_t long_positive = 0;
+  size_t long_negative = 0;
+  for (int32_t timing : timings) {
+    const uint32_t duration = duration_us(timing);
+    if (duration < SHORT_MIN_US) {
+      (timing >= 0 ? short_positive : short_negative)++;
+    } else if (duration > SYNC_MAX_US) {
+      (timing >= 0 ? long_positive : long_negative)++;
+    }
+  }
+
+  constexpr size_t MINIMUM_GLITCHES = 8;
+  const bool positive_glitches =
+      short_positive >= MINIMUM_GLITCHES && long_negative >= MINIMUM_GLITCHES &&
+      (short_positive + long_negative) * 2U >= timings.size();
+  const bool negative_glitches =
+      short_negative >= MINIMUM_GLITCHES && long_positive >= MINIMUM_GLITCHES &&
+      (short_negative + long_positive) * 2U >= timings.size();
+  return positive_glitches || negative_glitches;
+}
+
 void ActivLinkBurstDecoder::reset() {
   for (auto &candidate : this->candidates_) {
     candidate = {};
@@ -222,11 +250,12 @@ std::string summarize_activlink_capture(const std::vector<int32_t> &timings) {
     }
   }
 
-  char counts[112];
-  std::snprintf(counts, sizeof(counts), "n=%u short=%u long=%u sync=%u other=%u head=",
+  char counts[128];
+  std::snprintf(counts, sizeof(counts), "n=%u short=%u long=%u sync=%u other=%u collapse=%u head=",
                 static_cast<unsigned>(timings.size()), static_cast<unsigned>(short_count),
                 static_cast<unsigned>(long_count), static_cast<unsigned>(sync_count),
-                static_cast<unsigned>(other_count));
+                static_cast<unsigned>(other_count),
+                activlink_capture_has_demodulator_collapse(timings) ? 1U : 0U);
   std::string summary{counts};
 
   const size_t head_size = std::min<size_t>(timings.size(), 12);

@@ -34,6 +34,12 @@ size_t decode_activlink_rows(const std::vector<int32_t> &timings,
 // for protocol tests and callers that already own a complete RF burst.
 bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame);
 
+// Detect the characteristic output produced when the CC1101 frequency-offset
+// loop has drifted: short glitches of one polarity separated by millisecond
+// runs of the other. This is deliberately stricter than a generic decode
+// failure so unrelated RF activity does not cause receiver restart storms.
+bool activlink_capture_has_demodulator_collapse(const std::vector<int32_t> &timings);
+
 // Accumulate row consensus across adjacent RMT captures. A long gap between
 // sightings of the same frame starts a new burst; within a burst, each
 // distinct frame is emitted at most once. Rejected captures and other valid

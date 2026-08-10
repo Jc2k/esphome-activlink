@@ -7,6 +7,7 @@
 
 using esphome::honeywell_activlink::ActivLinkFrame;
 using esphome::honeywell_activlink::ActivLinkBurstDecoder;
+using esphome::honeywell_activlink::activlink_capture_has_demodulator_collapse;
 using esphome::honeywell_activlink::decode_activlink;
 using esphome::honeywell_activlink::decode_activlink_rows;
 using esphome::honeywell_activlink::summarize_activlink_capture;
@@ -175,7 +176,23 @@ void test_capture_summary_is_bounded_and_useful() {
   assert(summary.find("n=") == 0);
   assert(summary.find("short=") != std::string::npos);
   assert(summary.find("sync=") != std::string::npos);
+  assert(summary.find("collapse=0") != std::string::npos);
   assert(summary.size() < 240);
+}
+
+void test_detects_collapsed_fsk_demodulator_output() {
+  const std::array<int32_t, 12> pattern{
+      60, -3121, 100, -1980, 60, -4302, 60, -1760, 60, -4401, 80, -1400,
+  };
+  std::vector<int32_t> collapsed;
+  for (unsigned repeat = 0; repeat < 8; repeat++) {
+    collapsed.insert(collapsed.end(), pattern.begin(), pattern.end());
+  }
+
+  assert(activlink_capture_has_demodulator_collapse(collapsed));
+  assert(summarize_activlink_capture(collapsed).find("collapse=1") != std::string::npos);
+  assert(!activlink_capture_has_demodulator_collapse(
+      encode(FrameBytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01}, 1)));
 }
 
 void test_matching_repetitions_need_not_be_consecutive() {
@@ -204,6 +221,7 @@ int main() {
   test_rejected_captures_do_not_extend_an_emitted_burst();
   test_other_frames_do_not_extend_an_emitted_burst();
   test_capture_summary_is_bounded_and_useful();
+  test_detects_collapsed_fsk_demodulator_output();
   test_matching_repetitions_need_not_be_consecutive();
   test_rejects_bad_parity();
 }

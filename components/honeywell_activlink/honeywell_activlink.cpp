@@ -78,6 +78,15 @@ void ActivLinkComponent::loop() {
   }
 
   const uint32_t now = millis();
+  if (this->radio_recovery_pending_) {
+    this->radio_recovery_pending_ = false;
+    this->has_radio_recovery_ = true;
+    this->last_radio_recovery_ms_ = now;
+    this->radio_recoveries_++;
+    ESP_LOGW(TAG, "Restarting CC1101 RX after collapsed FSK capture");
+    this->radio_->begin_rx();
+  }
+
   if (this->pairing_mode_ != PairingMode::IDLE &&
       static_cast<int32_t>(now - this->pairing_deadline_ms_) >= 0) {
     this->pairing_mode_ = PairingMode::IDLE;
@@ -95,18 +104,24 @@ bool ActivLinkComponent::on_receive(remote_base::RemoteReceiveData data) {
   ActivLinkFrame frame{};
   size_t candidate_rows = 0;
   const auto &raw_data = data.get_raw_data();
-  if (!this->burst_decoder_.decode(raw_data, millis(), &frame, &candidate_rows)) {
+  const uint32_t now = millis();
+  if (!this->burst_decoder_.decode(raw_data, now, &frame, &candidate_rows)) {
     this->candidate_rows_ += candidate_rows;
     this->decode_failures_++;
     if (candidate_rows == 0 && raw_data.size() >= 80) {
       this->last_capture_summary_ = summarize_activlink_capture(raw_data);
+    }
+    if (candidate_rows == 0 && activlink_capture_has_demodulator_collapse(raw_data) &&
+        !this->radio_recovery_pending_ &&
+        (!this->has_radio_recovery_ || now - this->last_radio_recovery_ms_ >= RADIO_RECOVERY_COOLDOWN_MS)) {
+      this->radio_recovery_pending_ = true;
     }
     return false;
   }
 
   this->candidate_rows_ += candidate_rows;
   this->valid_frames_++;
-  this->last_valid_frame_ms_ = millis();
+  this->last_valid_frame_ms_ = now;
   this->has_valid_frame_ = true;
 
   const uint32_t device_id = frame.device_id();
@@ -480,6 +495,9 @@ void ActivLinkComponent::publish_diagnostics_(uint32_t now) {
   if (this->unconfigured_frames_sensor_ != nullptr) {
     this->unconfigured_frames_sensor_->publish_state(this->unconfigured_frames_);
   }
+  if (this->radio_recoveries_sensor_ != nullptr) {
+    this->radio_recoveries_sensor_->publish_state(this->radio_recoveries_);
+  }
   if (this->last_valid_frame_age_sensor_ != nullptr) {
     const float age = this->has_valid_frame_ ? (now - this->last_valid_frame_ms_) / 1000.0f
                                              : std::numeric_limits<float>::quiet_NaN();
@@ -496,6 +514,7 @@ void ActivLinkComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Relay deduplication: %" PRIu32 " ms", this->relay_deduplication_ms_);
   ESP_LOGCONFIG(TAG, "  Pairing timeout: %" PRIu32 " ms", this->pairing_timeout_ms_);
   ESP_LOGCONFIG(TAG, "  Diagnostic update interval: %" PRIu32 " ms", this->diagnostic_update_interval_ms_);
+  ESP_LOGCONFIG(TAG, "  Collapsed-capture RX recovery: enabled");
   for (size_t slot = 0; slot < this->slots_.size(); slot++) {
     const uint32_t device_id = this->pairings_.at(slot);
     if (device_id == EMPTY_ACTIVLINK_ID) {

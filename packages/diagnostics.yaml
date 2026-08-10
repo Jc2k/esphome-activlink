@@ -37,6 +37,8 @@ honeywell_activlink:
     name: ActivLink Duplicate Frames
   unconfigured_frames:
     name: ActivLink Unconfigured Frames
+  radio_recoveries:
+    name: ActivLink Radio Recoveries
   last_valid_frame_age:
     name: ActivLink Last Valid Frame Age
   last_capture_summary:

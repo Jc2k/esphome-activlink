@@ -112,6 +112,7 @@ binary_sensor:
 
 honeywell_activlink:
   id: activlink_decoder
+  radio_id: activlink_radio
   receiver_id: activlink_receiver
   pairing_timeout: 30s
   pair_button:
