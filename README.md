@@ -101,9 +101,11 @@ PWM frame many times. The decoder:
 
 Because asynchronous reception remains in RX continuously, the component also
 recognizes the CC1101's documented frequency-offset-loop collapse signature.
-It restarts RX after such a rejected capture, clearing the stale frequency
-estimate quickly enough to receive later rows from the same repeated broadcast.
-The **ActivLink Radio Recoveries** diagnostic counts these restarts.
+It only acts when the capture also contains correctly aligned ActivLink PWM
+pairs, filtering RF noise that cannot possibly contain a complete row. It then
+restarts RX, clearing the stale frequency estimate quickly enough to receive
+later rows from the same repeated broadcast. The **ActivLink Radio Recoveries**
+diagnostic counts these restarts.
 
 This follows the published
 [ActivLink frame analysis](https://github.com/klohner/honeywell-wireless-doorbell)

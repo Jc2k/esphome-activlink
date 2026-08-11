@@ -150,6 +150,41 @@ bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame
   return false;
 }
 
+bool activlink_capture_is_plausible(const std::vector<int32_t> &timings) {
+  constexpr size_t MINIMUM_PLAUSIBLE_PAIRS = 8;
+  constexpr size_t ROW_TIMINGS = 1U + FRAME_BITS * 2U + 1U;
+  if (timings.size() < ROW_TIMINGS) {
+    return false;
+  }
+
+  for (size_t start = 0; start + ROW_TIMINGS <= timings.size(); start++) {
+    if (!is_sync(timings[start])) {
+      continue;
+    }
+
+    const bool preamble_level = timings[start] >= 0;
+    size_t matching_pairs = 0;
+    size_t cursor = start + 1U;
+    for (size_t bit = 0; bit < FRAME_BITS; bit++, cursor += 2U) {
+      const int32_t first = timings[cursor];
+      const int32_t second = timings[cursor + 1U];
+      const bool levels_match = (first >= 0) != preamble_level &&
+                                (second >= 0) == preamble_level &&
+                                !same_level(first, second);
+      const bool timings_match = (is_short(first) && is_long(second)) ||
+                                 (is_long(first) && is_short(second));
+      if (levels_match && timings_match) {
+        matching_pairs++;
+      }
+    }
+
+    if (matching_pairs >= MINIMUM_PLAUSIBLE_PAIRS) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool activlink_capture_has_demodulator_collapse(const std::vector<int32_t> &timings) {
   if (timings.size() < 80) {
     return false;
@@ -250,11 +285,12 @@ std::string summarize_activlink_capture(const std::vector<int32_t> &timings) {
     }
   }
 
-  char counts[128];
-  std::snprintf(counts, sizeof(counts), "n=%u short=%u long=%u sync=%u other=%u collapse=%u head=",
+  char counts[144];
+  std::snprintf(counts, sizeof(counts),
+                "n=%u short=%u long=%u sync=%u other=%u plausible=%u collapse=%u head=",
                 static_cast<unsigned>(timings.size()), static_cast<unsigned>(short_count),
                 static_cast<unsigned>(long_count), static_cast<unsigned>(sync_count),
-                static_cast<unsigned>(other_count),
+                static_cast<unsigned>(other_count), activlink_capture_is_plausible(timings) ? 1U : 0U,
                 activlink_capture_has_demodulator_collapse(timings) ? 1U : 0U);
   std::string summary{counts};
 

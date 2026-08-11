@@ -107,6 +107,11 @@ bool ActivLinkComponent::on_receive(remote_base::RemoteReceiveData data) {
   const uint32_t now = millis();
   if (!this->burst_decoder_.decode(raw_data, now, &frame, &candidate_rows)) {
     this->candidate_rows_ += candidate_rows;
+    const bool plausible_capture = candidate_rows != 0 || activlink_capture_is_plausible(raw_data);
+    if (!plausible_capture) {
+      return false;
+    }
+
     this->decode_failures_++;
     if (candidate_rows == 0 && raw_data.size() >= 80) {
       this->last_capture_summary_ = summarize_activlink_capture(raw_data);

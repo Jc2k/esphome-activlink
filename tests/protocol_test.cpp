@@ -8,6 +8,7 @@
 using esphome::honeywell_activlink::ActivLinkFrame;
 using esphome::honeywell_activlink::ActivLinkBurstDecoder;
 using esphome::honeywell_activlink::activlink_capture_has_demodulator_collapse;
+using esphome::honeywell_activlink::activlink_capture_is_plausible;
 using esphome::honeywell_activlink::decode_activlink;
 using esphome::honeywell_activlink::decode_activlink_rows;
 using esphome::honeywell_activlink::summarize_activlink_capture;
@@ -176,6 +177,7 @@ void test_capture_summary_is_bounded_and_useful() {
   assert(summary.find("n=") == 0);
   assert(summary.find("short=") != std::string::npos);
   assert(summary.find("sync=") != std::string::npos);
+  assert(summary.find("plausible=1") != std::string::npos);
   assert(summary.find("collapse=0") != std::string::npos);
   assert(summary.size() < 240);
 }
@@ -193,6 +195,45 @@ void test_detects_collapsed_fsk_demodulator_output() {
   assert(summarize_activlink_capture(collapsed).find("collapse=1") != std::string::npos);
   assert(!activlink_capture_has_demodulator_collapse(
       encode(FrameBytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01}, 1)));
+}
+
+void test_filters_protocol_impossible_rf_noise() {
+  const std::array<int32_t, 12> noise_pattern{
+      60, -820, 80, -3401, 60, -140, 60, -2961, 60, -760, 80, -120,
+  };
+  std::vector<int32_t> noise;
+  for (unsigned repeat = 0; repeat < 12; repeat++) {
+    noise.insert(noise.end(), noise_pattern.begin(), noise_pattern.end());
+  }
+
+  assert(activlink_capture_has_demodulator_collapse(noise));
+  assert(!activlink_capture_is_plausible(noise));
+  assert(!activlink_capture_is_plausible(std::vector<int32_t>(82, 60)));
+}
+
+void test_accepts_a_damaged_but_plausible_activlink_row() {
+  const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
+  auto damaged = encode(bytes, 1);
+  damaged[2] = 800;
+
+  std::vector<ActivLinkFrame> rows;
+  assert(decode_activlink_rows(damaged, &rows) == 0);
+  assert(activlink_capture_is_plausible(damaged));
+}
+
+void test_accepts_plausible_rows_with_a_collapse_signature() {
+  const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
+  auto collapsed = encode(bytes, 1);
+  // Preserve eighteen correctly aligned PWM pairs while replacing thirty
+  // pairs with the polarity-specific glitch/gap collapse signature.
+  for (size_t bit = 0; bit < 30; bit++) {
+    const size_t cursor = 2U + bit * 2U;
+    collapsed[cursor] = 60;
+    collapsed[cursor + 1U] = -1000;
+  }
+
+  assert(activlink_capture_has_demodulator_collapse(collapsed));
+  assert(activlink_capture_is_plausible(collapsed));
 }
 
 void test_matching_repetitions_need_not_be_consecutive() {
@@ -222,6 +263,9 @@ int main() {
   test_other_frames_do_not_extend_an_emitted_burst();
   test_capture_summary_is_bounded_and_useful();
   test_detects_collapsed_fsk_demodulator_output();
+  test_filters_protocol_impossible_rf_noise();
+  test_accepts_a_damaged_but_plausible_activlink_row();
+  test_accepts_plausible_rows_with_a_collapse_signature();
   test_matching_repetitions_need_not_be_consecutive();
   test_rejects_bad_parity();
 }
