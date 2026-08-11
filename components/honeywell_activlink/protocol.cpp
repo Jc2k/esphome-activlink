@@ -151,7 +151,10 @@ bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame
 }
 
 bool activlink_capture_is_plausible(const std::vector<int32_t> &timings) {
-  constexpr size_t MINIMUM_PLAUSIBLE_PAIRS = 8;
+  // Dense ambient RF can accumulate several matching pairs by chance across a
+  // 48-bit window. A real row, even when partly damaged by demodulator drift,
+  // retains a sustained run of correctly aligned PWM pairs.
+  constexpr size_t MINIMUM_CONSECUTIVE_PLAUSIBLE_PAIRS = 12;
   constexpr size_t ROW_TIMINGS = 1U + FRAME_BITS * 2U + 1U;
   if (timings.size() < ROW_TIMINGS) {
     return false;
@@ -163,7 +166,7 @@ bool activlink_capture_is_plausible(const std::vector<int32_t> &timings) {
     }
 
     const bool preamble_level = timings[start] >= 0;
-    size_t matching_pairs = 0;
+    size_t consecutive_matching_pairs = 0;
     size_t cursor = start + 1U;
     for (size_t bit = 0; bit < FRAME_BITS; bit++, cursor += 2U) {
       const int32_t first = timings[cursor];
@@ -174,12 +177,13 @@ bool activlink_capture_is_plausible(const std::vector<int32_t> &timings) {
       const bool timings_match = (is_short(first) && is_long(second)) ||
                                  (is_long(first) && is_short(second));
       if (levels_match && timings_match) {
-        matching_pairs++;
+        consecutive_matching_pairs++;
+        if (consecutive_matching_pairs >= MINIMUM_CONSECUTIVE_PLAUSIBLE_PAIRS) {
+          return true;
+        }
+      } else {
+        consecutive_matching_pairs = 0;
       }
-    }
-
-    if (matching_pairs >= MINIMUM_PLAUSIBLE_PAIRS) {
-      return true;
     }
   }
   return false;

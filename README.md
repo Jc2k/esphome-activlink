@@ -101,8 +101,8 @@ PWM frame many times. The decoder:
 
 Because asynchronous reception remains in RX continuously, the component also
 recognizes the CC1101's documented frequency-offset-loop collapse signature.
-It only acts when the capture also contains correctly aligned ActivLink PWM
-pairs, filtering RF noise that cannot possibly contain a complete row. It then
+It only acts when the capture also contains a sustained run of correctly
+aligned ActivLink PWM pairs, filtering coincidental ambient RF matches. It then
 restarts RX, clearing the stale frequency estimate quickly enough to receive
 later rows from the same repeated broadcast. The **ActivLink Radio Recoveries**
 diagnostic counts these restarts.

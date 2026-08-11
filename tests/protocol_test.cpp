@@ -211,6 +211,28 @@ void test_filters_protocol_impossible_rf_noise() {
   assert(!activlink_capture_is_plausible(std::vector<int32_t>(82, 60)));
 }
 
+void test_filters_dense_rf_with_sparse_coincidental_pairs() {
+  // Ambient captures reported in the field contain hundreds of timings and
+  // enough short/long symbols to produce isolated matches by chance. Eight
+  // scattered valid-looking pairs satisfied the old plausibility score.
+  std::vector<int32_t> noise{60, -720, 60, -1401, 140, -1520,
+                             60, -1581, 60, -1700, 60, -2301};
+  noise.push_back(500);
+  for (size_t bit = 0; bit < 48; bit++) {
+    if (bit % 6U == 0) {
+      noise.push_back(-160);
+      noise.push_back(320);
+    } else {
+      noise.push_back(-800);
+      noise.push_back(800);
+    }
+  }
+  noise.push_back(-500);
+  noise.resize(422, 800);
+
+  assert(!activlink_capture_is_plausible(noise));
+}
+
 void test_accepts_a_damaged_but_plausible_activlink_row() {
   const FrameBytes bytes{0xFB, 0x10, 0x00, 0x20, 0x00, 0x01};
   auto damaged = encode(bytes, 1);
@@ -264,6 +286,7 @@ int main() {
   test_capture_summary_is_bounded_and_useful();
   test_detects_collapsed_fsk_demodulator_output();
   test_filters_protocol_impossible_rf_noise();
+  test_filters_dense_rf_with_sparse_coincidental_pairs();
   test_accepts_a_damaged_but_plausible_activlink_row();
   test_accepts_plausible_rows_with_a_collapse_signature();
   test_matching_repetitions_need_not_be_consecutive();

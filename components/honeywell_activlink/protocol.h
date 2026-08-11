@@ -34,9 +34,9 @@ size_t decode_activlink_rows(const std::vector<int32_t> &timings,
 // for protocol tests and callers that already own a complete RF burst.
 bool decode_activlink(const std::vector<int32_t> &timings, ActivLinkFrame *frame);
 
-// Return true when a capture contains enough correctly aligned ActivLink PWM
-// pairs to be a credible damaged row. This is intentionally weaker than a
-// decode, but filters asynchronous RF noise that cannot possibly be ActivLink.
+// Return true when a capture contains a sustained run of correctly aligned
+// ActivLink PWM pairs from a credible damaged row. This is intentionally weaker
+// than a decode, but filters asynchronous RF noise that only matches by chance.
 bool activlink_capture_is_plausible(const std::vector<int32_t> &timings);
 
 // Detect the characteristic output produced when the CC1101 frequency-offset
